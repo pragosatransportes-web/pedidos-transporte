@@ -374,6 +374,9 @@ table.plano-lista tr.det td{background:color-mix(in srgb,var(--accent) 6%,var(--
 table.plano-lista tr.det td span{display:inline-flex;gap:6px;align-items:baseline;margin-right:22px}
 table.plano-lista tr.det small{font-weight:700}
 @media (max-width:640px){.pc-head .row{width:100%}}
+
+table.mx th.c,table.mx td.c{text-align:center;white-space:normal;min-width:70px}
+table.mx .ok-dot{color:var(--ok);font-size:14px}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -444,7 +447,7 @@ const TIPO=Object.fromEntries(TIPOS.map(t=>[t.k,t]));
 const TIPO_SHORT={viatura:"Viatura",armazem:"Armazém",fornecedor:"Fornecedor",recolha:"Recolha",maquina:"Máquina",cisterna:"Cisterna"};
 const ROLE_LABEL={admin:"Administrador",logistica:"Gestor de logística",obra:"Gestor de obra",consulta:"Consulta e análise"};
 const CFG_DEF={toleranciaMin:0,duracaoPadraoH:4,alertaH:24,refPrazo:"previstoFim",minCustos:5,unidades:["t","kg","m³","L","un"],boxes:[],emailAtivo:false};
-const COLS=["utilizadores","acessos","categorias","equipamentos","materiais","zonas","cfg","obras","viaturas","transportadoras","fornecedores","gestores","pedidos","notificacoes","sl","eliminados","convites"];
+const COLS=["utilizadores","acessos","categorias","equipamentos","materiais","zonas","cfg","obras","viaturas","transportadoras","fornecedores","gestores","pedidos","notificacoes","sl","eliminados","convites","clientes"];
 
 /* ========== estado ========== */
 const S={sideOff:!!window.__sideOff,
@@ -466,7 +469,7 @@ let db=null,U=null,DL=null,AS=null,M={};
 
 function CFG(){const c=S.d.cfg.find(x=>x.id==="geral")||{};return {...CFG_DEF,...c};}
 function buildMaps(){buildPS();const by=a=>Object.fromEntries(a.map(x=>[x.id,x]));
-  M={cat:by(S.d.categorias),eq:by(S.d.equipamentos),mat:by(S.d.materiais),zona:by(S.d.zonas),obra:by(S.d.obras),via:by(viaturasAll()),tr:by(S.d.transportadoras),forn:by(S.d.fornecedores),gest:by(S.d.gestores),conv:by(S.d.convites),user:by(S.d.utilizadores),ped:by(S.d.pedidos)};}
+  M={cat:by(S.d.categorias),eq:by(S.d.equipamentos),mat:by(S.d.materiais),zona:by(S.d.zonas),obra:by(S.d.obras),via:by(viaturasAll()),tr:by(S.d.transportadoras),forn:by(S.d.fornecedores),gest:by(S.d.gestores),conv:by(S.d.convites),cli:by(S.d.clientes||[]),user:by(S.d.utilizadores),ped:by(S.d.pedidos)};}
 /* ========== planeamento de máquinas: estado partilhado e regras (mesmas do planeador) ========== */
 let PS={ok:false,pm:[],legal:{},deckH:1.05,loadGap:0.5,prefs:[],locais:[],roadFactor:1.3,velLimite:80,velReducao:40,condMaxDia:9,pausaApos:4.5,pausaDur:0.75,tManobra:2,groups:[],specs:{},eqLoc:{},req:[],fretes:[]};
 function buildPS(){const sl=Object.fromEntries(S.d.sl.map(d=>[d.id,d]));const c=sl.config||null,g=k=>c&&c[k]!=null?c[k]:null;const R=window.PMR||{DEFAULT_LEGAL:{}};const fr=[];
@@ -917,8 +920,11 @@ function secTipo(F){const t=F.tipo;let body="";
   else if(t==="recolha"){let opts=eqs("",false).filter(e=>e.recolha);if(!opts.length)opts=eqs("",false).filter(e=>["porta-maquinas","carro-grua"].includes(e.id));
     body=`${fld("form.equipamentoId","Tipo de equipamento para recolha",{type:"select",req:true,opts:[["","Selecione"]].concat(opts.map(e=>[e.id,e.nome]))})}${fld("form.nCargas","Nº de cargas",{type:"number",min:1,req:true})}
      ${fld("form.cDesc","Material a recolher",{cls:"full",ph:"Opcional. Ex.: cofragens, contentor de entulho"})}${fld("form.cPeso","Peso aproximado por carga (t)",{type:"number",step:"any",min:0})}`;}
-  else if(t==="cisterna"){const ms=matsCisterna();body=`${fld("form.cliente","Cliente",{req:true,ph:"Ex.: VIGOBLOCO"})}${fld("form.equipamentoId","Tipo de cisterna",{type:"select",opts:[["","Indiferente (define-se no agendamento)"]].concat(eqs("cisternas").map(e=>[e.id,e.nome]))})}
-     ${fld("form.cMat","Material",{type:"select",req:true,opts:[["","Selecione"]].concat(ms.map(m=>[m.id,m.nome]))})}${fld("form.cDesc","Produto (como vem no pedido)",{ph:"Ex.: CEM II/B-L 42,5R"})}
+  else if(t==="cisterna"){const cl=F.clienteId&&F.clienteId!=="__outro"?M.cli[F.clienteId]:null;const todos=matsCisterna();const ms=cl&&(cl.materiais||[]).length?todos.filter(m=>cl.materiais.includes(m.id)):todos;
+    if(F.cMat&&F.cMat!=="__outro"&&!ms.some(m=>m.id===F.cMat))F.cMat="";
+    const clis=(S.d.clientes||[]).filter(c=>c.ativo!==false).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt"));
+    body=`${clis.length?fld("form.clienteId","Cliente",{type:"select",req:true,opts:[["","Selecione o cliente"]].concat(clis.map(c=>[c.id,c.nome]),[["__outro","Outro cliente (escrever)"]])}):""}${!clis.length||F.clienteId==="__outro"?fld("form.cliente",clis.length?"Nome do cliente":"Cliente",{req:true,ph:"Ex.: VIGOBLOCO"}):""}${fld("form.equipamentoId","Tipo de cisterna",{type:"select",opts:[["","Indiferente (define-se no agendamento)"]].concat(eqs("cisternas").map(e=>[e.id,e.nome]))})}
+     ${fld("form.cMat","Material",{type:"select",req:true,opts:[["","Selecione"]].concat(ms.map(m=>[m.id,m.nome]),[["__outro","Outro (descrição livre)"]]),hint:cl&&(cl.materiais||[]).length?`Produtos que ${cl.nome} consome.`:""})}${F.cMat==="__outro"?fld("form.cMatOutro","Descrição do material",{req:true,ph:"Ex.: Cal hidratada"}):""}${fld("form.cDesc","Produto (como vem no pedido)",{ph:"Ex.: CEM II/B-L 42,5R"})}
      ${fld("form.cPeso","Quantidade total (t)",{type:"number",step:"any",min:0})}${fld("form.nCargas","Nº de cargas",{type:"number",min:1,req:true})}
      ${fld("form.cHoraCarga","Hora de carga",{ph:"Ex.: 07:00"})}${fld("form.cJanela","Hora ou janela de descarga",{ph:"Ex.: 08:00-16:30 ou Manhã"})}`;}
   else if(t==="maquina")body=maqPicker(F)+`<div class="full">${analiseHtml(analiseMaq(formAn(F)))}</div>`;
@@ -948,7 +954,7 @@ function maqPicker(F){if(!CAT().length)return `<div class="note warn full">A lis
   <small>* Peso e dimensões estimados pela classe da máquina. Corrigem-se no Auxílio ao planeamento de máquinas › Lista de Equipamentos.</small></div>`;}
 async function guardarPed(submeter){const F=S.form;F.err="";const t=F.tipo;const aprov=!!F.paraAprovacao,estSub=aprov?"Pendente de aprovação":"Por agendar";
   if(!t){F.err="Escolha o tipo de pedido.";return render();}if(!F.obraId&&t!=="cisterna"){F.err="Selecione a obra.";return render();}
-  const carga={descricao:String(F.cDesc||"").trim(),materialId:F.cMat||null,c:numOr(F.cC),l:numOr(F.cL),a:numOr(F.cA),peso:numOr(F.cPeso),volumes:numOr(F.cVol)};
+  const carga={descricao:String((t==="cisterna"&&F.cMat==="__outro"?(F.cMatOutro||F.cDesc):F.cDesc)||"").trim(),materialId:F.cMat&&F.cMat!=="__outro"?F.cMat:null,c:numOr(F.cC),l:numOr(F.cL),a:numOr(F.cA),peso:numOr(F.cPeso),volumes:numOr(F.cVol)};
   const forn=F.fornecedorId&&F.fornecedorId!=="__outro"?M.forn[F.fornecedorId]:null;const fornNome=forn?forn.nome:String(F.fornecedorNome||"").trim();
   const pi=fromInput(F.periodoInicio),pf=fromInput(F.periodoFim);
   if(t==="viatura"&&pi&&pf&&pf<=pi){F.err="O fim do período tem de ser depois do início.";return render();}
@@ -960,7 +966,7 @@ async function guardarPed(submeter){const F=S.form;F.err="";const t=F.tipo;const
     if(t==="armazem"||t==="fornecedor"){need(carga.descricao,"descrição da carga");need([carga.c,carga.l,carga.a,carga.peso].some(x=>x!=null),"dimensão ou peso da carga");}
     if(t==="recolha"){need(F.equipamentoId,"tipo de equipamento para recolha");need(numOr(F.nCargas)>=1,"nº de cargas");}
     if(t==="maquina")need(F.maquinas.length,"máquinas a transportar");
-    if(t==="cisterna"){need(String(F.cliente||"").trim(),"cliente");need(F.cMat,"material");need(numOr(F.nCargas)>=1,"nº de cargas");}
+    if(t==="cisterna"){if(F.clienteId&&F.clienteId!=="__outro")F.cliente=M.cli[F.clienteId]?.nome||F.cliente;need(String(F.cliente||"").trim(),"cliente");need(F.cMat&&(F.cMat!=="__outro"||String(F.cMatOutro||"").trim()),"material");need(numOr(F.nCargas)>=1,"nº de cargas");}
     if(t!=="viatura"&&t!=="cisterna")need(String(F.localCarga||"").trim(),t==="maquina"?"origem":t==="recolha"?"local de recolha":"local de carga");
     need(String(F.localDescarga||"").trim(),t==="viatura"?"local de trabalho":"destino");
     if(t!=="viatura")need(F.pretendidaEm,"data e hora");
@@ -973,7 +979,7 @@ async function guardarPed(submeter){const F=S.form;F.err="";const t=F.tipo;const
     categoriaId:t==="cisterna"?"cisternas":eqId?(M.eq[eqId]?.categoriaId||F.categoriaId||null):(F.categoriaId||null),equipamentoId:eqId,variante:t==="maquina"||t==="recolha"?"":(F.variante||""),
     periodoInicio:t==="viatura"?pi:null,periodoFim:t==="viatura"?pf:null,box:t==="armazem"?String(F.box||"").trim():"",
     fornecedorId:t==="fornecedor"&&forn?forn.id:null,fornecedorNome:t==="fornecedor"?fornNome:"",
-    carga:["armazem","fornecedor","recolha","cisterna"].includes(t)?(t==="cisterna"?{...carga,descricao:carga.descricao||M.mat[carga.materialId]?.nome||""}:carga):null,nCargas:t==="recolha"||t==="cisterna"?numOr(F.nCargas):null,cliente:t==="cisterna"?String(F.cliente||"").trim():"",horaCarga:t==="cisterna"?String(F.cHoraCarga||"").trim():"",janelaDescarga:t==="cisterna"?String(F.cJanela||"").trim():"",
+    carga:["armazem","fornecedor","recolha","cisterna"].includes(t)?(t==="cisterna"?{...carga,descricao:carga.descricao||M.mat[carga.materialId]?.nome||""}:carga):null,nCargas:t==="recolha"||t==="cisterna"?numOr(F.nCargas):null,cliente:t==="cisterna"?String(F.cliente||"").trim():"",clienteId:t==="cisterna"&&F.clienteId&&F.clienteId!=="__outro"?F.clienteId:null,horaCarga:t==="cisterna"?String(F.cHoraCarga||"").trim():"",janelaDescarga:t==="cisterna"?String(F.cJanela||"").trim():"",
     maquinas,analise,maqDisp:t==="maquina"?fromInput(F.maqDisp):null,kmManual:t==="maquina"?numOr(F.kmManual):null,
     localCarga:t==="viatura"?"":String(F.localCarga||"").trim(),localDescarga:String(F.localDescarga||"").trim(),coordCarga:String(F.coordCarga||"").trim(),coordDescarga:String(F.coordDescarga||"").trim(),
     pretendidaEm:t==="viatura"?pi:fromInput(F.pretendidaEm),instrucoes:F.instrucoes,restricoes:F.restricoes,anexos:F.anexos};
@@ -1223,7 +1229,7 @@ function vObras(){const f=S.f.obras,q=f.q.trim().toLowerCase();const os=S.d.obra
    :`<div class="empty"><b>Ainda não há obras registadas.</b><br>${can.obra()?"Crie a primeira obra com “+ Nova obra”: código, nome, zona operacional e gestor responsável.":"As obras são criadas pelos gestores de obra."}</div>`}`;}
 
 /* ========== CATÁLOGO ========== */
-function vCatalogo(){const f=S.f.cat;const ad=can.admin(),lg=can.log();const tabs=[["viaturas","Tipos de viatura"],["maquinas","Lista de equipamentos"],["fornecedores","Fornecedores"],["boxes","Boxes de carga"],["materiais","Materiais"],["categorias","Categorias"],["unidades","Unidades"]];let body="";
+function vCatalogo(){const f=S.f.cat;const ad=can.admin(),lg=can.log();const tabs=[["viaturas","Tipos de viatura"],["maquinas","Lista de equipamentos"],["fornecedores","Fornecedores"],["clientes","Clientes de cisternas"],["boxes","Boxes de carga"],["materiais","Materiais"],["categorias","Categorias"],["unidades","Unidades"]];let body="";
   if(f.tab==="viaturas"){body=`${ad?`<div class="row" style="justify-content:flex-end"><button class="btn pri" data-act="equip" data-a="">+ Nova viatura ou equipamento</button></div>`:""}
    <div class="grid g3">${cats(true).map(c=>`<div class="panel"><div class="ph"><h3>${esc(c.nome)}</h3>${c.ativo===false?'<span class="chip c-idle">Inativa</span>':""}</div><div class="tl">${eqs(c.id,true).map(e=>`<div style="grid-template-columns:1fr auto"><span>${ad?`<button class="btn sm ghost" style="padding:0;font-weight:600" data-act="equip" data-a="${e.id}" data-del="equipamentos|${e.id}">${esc(e.nome)}</button>`:`<b>${esc(e.nome)}</b>`}${e.ativo===false?' <span class="chip c-idle">Inativo</span>':""}${(e.variantes||[]).length?`<br><small>${e.variantes.map(esc).join(" · ")}</small>`:""}</span><span>${e.recolha?'<span class="chip c-info">Recolha</span>':""}</span></div>`).join("")||'<div class="muted">Sem equipamentos.</div>'}</div></div>`).join("")}</div>
    <div class="def">Esta hierarquia é a 1.ª questão do pedido “Atribuir viatura”. “Recolha” marca os equipamentos que aparecem em “Recolher material”. As variantes escolhem-se depois do equipamento.</div>`;}
@@ -1232,6 +1238,12 @@ function vCatalogo(){const f=S.f.cat;const ad=can.admin(),lg=can.log();const tab
     ${tbl("cmaq",[{k:"num",l:"Nº",v:e=>`<span class="pn">${esc(e.num)}</span>`},{k:"marca",l:"Marca"},{k:"modelo",l:"Modelo"},{k:"classe",l:"Classe"},{k:"peso",l:"Peso",cls:"r",v:e=>`<span class="num">${tn(e.s.peso)} t</span>`,s:e=>e.s.peso},{k:"dim",l:"C × L × A",cls:"r",nosort:true,v:e=>`<span class="num">${e.s.c} × ${e.s.l} × ${e.s.a} m</span>`},
      {k:"est",l:"Valores",v:e=>e.s.est?'<span class="chip c-idle">Estimados pela classe</span>':'<span class="chip c-ok">Confirmados</span>',s:e=>e.s.est?1:0},{k:"loc",l:"Última localização",nosort:true,v:e=>esc(PS.eqLoc[e.num]?.loc||"—")}],ms,{k:"marca",size:50})}
     <div class="def">${CAT().length} equipamentos, a mesma lista do planeador. Os pesos e dimensões corrigidos no planeador aplicam-se aqui e nos pedidos “Entregar máquina”.</div>`;}
+  else if(f.tab==="clientes"){const ms=matsCisterna();const cl=[...(S.d.clientes||[])].sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt"));
+    body=`<div class="row" style="justify-content:space-between"><p class="muted" style="margin:0;max-width:80ch">Clientes servidos pela CPSA Cisternas e os produtos que cada um consome. No novo pedido de cisterna, ao escolher o cliente, só aparecem os produtos dele (mais a opção “Outro”).</p>
+     <div class="row">${ad?`<label class="btn" for="up_cli">Importar matriz (Excel)<input id="up_cli" type="file" accept=".xlsx,.xls" data-cli="1" hidden></label>`:""}${lg?`<button class="btn pri" data-act="cliente" data-a="">+ Novo cliente</button>`:""}</div></div>
+     ${cl.length?`<div class="tw"><table class="mx"><thead><tr><th>Cliente</th>${ms.map(m=>`<th class="c">${esc(m.nome)}</th>`).join("")}<th class="r">Pedidos</th></tr></thead><tbody>
+      ${cl.map(c=>`<tr class="${lg?"click":""}" ${lg?`data-act="cliente" data-a="${c.id}"`:""} data-del="cli|${c.id}"><td><b>${esc(c.nome)}</b>${c.ativo===false?' <span class="chip c-idle">Inativo</span>':""}</td>${ms.map(m=>`<td class="c">${(c.materiais||[]).includes(m.id)?'<span class="ok-dot" aria-label="Sim">●</span>':""}</td>`).join("")}<td class="r num">${S.d.pedidos.filter(p=>p.clienteId===c.id||(!p.clienteId&&normNome(p.cliente)===normNome(c.nome))).length}</td></tr>`).join("")}</tbody></table></div>`
+     :`<div class="empty"><b>Ainda não há clientes de cisternas.</b><br>Importe a matriz Excel (clientes na coluna A, produtos na linha 1, uma marca onde o cliente consome o produto) ou crie-os um a um.</div>`}`;}
   else if(f.tab==="fornecedores"){body=`${lg?`<div class="row" style="justify-content:flex-end"><button class="btn pri" data-act="fornecedor" data-a="">+ Novo fornecedor</button></div>`:""}
    ${S.d.fornecedores.length?tbl("forn",[{k:"nome",l:"Fornecedor",v:x=>`<b>${esc(x.nome)}</b>${x.ativo===false?' <span class="chip c-idle">Inativo</span>':""}`},{k:"contacto",l:"Contacto"},{k:"morada",l:"Morada de recolha"},{k:"n",l:"Pedidos",cls:"r",v:x=>`<span class="num">${S.d.pedidos.filter(p=>p.fornecedorId===x.id).length}</span>`}],S.d.fornecedores,{row:lg?"fornecedor":null,k:"nome"})
    :`<div class="empty"><b>Ainda não há fornecedores registados.</b><br>Os fornecedores registados aparecem no pedido “Entregar material de fornecedor externo”. Até lá, o gestor de obra escreve o nome do fornecedor.</div>`}`;}
@@ -1380,6 +1392,15 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
   if(m.t==="transp")return wrap(`<h2>${m.id?"Editar transportadora":"Nova transportadora"}</h2>`,`${fld("modal.f.nome","Nome da empresa",{req:true})}${fld("modal.f.nif","NIF")}${fld("modal.f.contacto","Contacto")}
      <div class="fld"><span>Tipos de equipamento que disponibiliza</span><div class="row">${eqs("",true).map(e=>fld(`modal.f.eqs.${e.id}`,e.nome,{type:"check"})).join("")}</div></div>${fld("modal.f.obs","Observações",{type:"textarea"})}${fld("modal.f.ativo","Ativa",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
      `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveSimple" data-a="transportadoras">Guardar</button>`,true);
+  if(m.t==="cliente")return wrap(`<h2>${m.id?"Editar":"Novo"} cliente de cisternas</h2>`,`${fld("modal.f.nome","Nome do cliente",{req:true})}${fld("modal.f.contacto","Contacto")}
+     <section class="form-sec"><header><span class="k">✓</span><h3>Produtos que consome</h3></header><div>${matsCisterna().map(x=>fld(`modal.f.mat.${x.id}`,x.nome,{type:"check"})).join("")||'<span class="muted">Ainda não há materiais de cisterna.</span>'}</div></section>
+     ${fld("modal.f.obs","Observações",{type:"textarea"})}${fld("modal.f.ativo","Ativo",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
+     `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveSimple" data-a="clientes">Guardar</button>`,true);
+  if(m.t==="impCli"){const I=S.impCli;const nov=I.prods.filter(p=>!p.matId);return wrap(`<h2>Importar clientes de cisternas</h2>`,`<p class="muted" style="margin:0">${esc(I.nome)} · folha “${esc(I.folha)}” · ${I.rows.length} cliente(s) · ${I.prods.length} produto(s).</p>
+     ${nov.length?`<div class="note warn">${nov.length} produto(s) ainda não existem em Materiais e vão ser criados para cisternas: ${nov.map(p=>esc(p.nome)).join(", ")}.</div>`:""}
+     <div class="tw"><table class="mx"><thead><tr><th>Cliente</th>${I.prods.map(p=>`<th class="c">${esc(p.nome)}${p.matId&&normNome(M.mat[p.matId]?.nome)!==normNome(p.nome)?`<br><small>→ ${esc(M.mat[p.matId]?.nome)}</small>`:""}</th>`).join("")}</tr></thead><tbody>
+     ${I.rows.map(r=>`<tr><td><b>${esc(r.nome)}</b>${r.existe?' <small class="muted">(atualiza)</small>':""}</td>${I.prods.map((p,j)=>`<td class="c">${r.tem[j]?"●":""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`,
+     `<button class="btn" data-act="close">Cancelar</button>${I.rows.length?`<button class="btn pri" data-act="doImpCli">Importar ${I.rows.length} cliente(s)</button>`:""}`);}
   if(m.t==="fornecedor")return wrap(`<h2>${m.id?"Editar":"Novo"} fornecedor</h2>`,`${fld("modal.f.nome","Nome",{req:true})}${fld("modal.f.contacto","Contacto")}${fld("modal.f.morada","Morada de recolha")}${fld("modal.f.obs","Observações",{type:"textarea"})}${fld("modal.f.ativo","Ativo",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
      `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveSimple" data-a="fornecedores">Guardar</button>`,true);
   if(m.t==="material")return wrap(`<h2>${m.id?"Editar":"Novo"} material</h2>`,`${fld("modal.f.nome","Nome",{req:true})}${fld("modal.f.tipo","Tipo",{type:"select",opts:[["material","Material"],["maquina","Máquina"]]})}${fld("modal.f.unidade","Unidade de medida",{type:"select",opts:[["","—"]].concat(CFG().unidades.map(u=>[u,u]))})}${fld("modal.f.caracteristicas","Características relevantes",{type:"textarea",ph:"Ex.: peso típico, dimensões, cuidados no transporte"})}
@@ -1440,7 +1461,7 @@ function blocoPedido(P){const rows=[];const r=(k,v)=>rows.push(`<dt>${k}</dt><dd
   else if(P.tipo==="recolha"){r("Equipamento para recolha",`<b>${esc(eqName(P.equipamentoId))}</b>`);r("Nº de cargas",`<span class="num">${P.nCargas??"—"}</span>`);if(P.carga&&(P.carga.descricao||P.carga.peso!=null))r("Material",esc(cargaTxt(P.carga)));}
   else if(P.tipo==="maquina"){r("Máquinas",`<div class="tw"><table><thead><tr><th>Máquina</th><th>Classe</th><th class="r">Peso</th><th class="r">C × L × A</th></tr></thead><tbody>${(P.maquinas||[]).map(m=>`<tr><td>${esc(m.label)}</td><td>${esc(m.classe)}</td><td class="r num">${tn(m.peso)} t</td><td class="r num">${m.c} × ${m.l} × ${m.a} m${m.est?" *":""}</td></tr>`).join("")}</tbody></table></div>`);
     if(P.maqDisp)r("Disponível desde",`<span class="num">${fmtDT(P.maqDisp)}</span>`);if(P.planeador)r("Planeador de rotas",`Enviado em ${fmtDT(P.planeador.enviadoEm)} por ${esc(nome(P.planeador.por))}`);}
-  else if(P.tipo==="cisterna"){const c=P.carga||{};r("Cliente",`<b>${esc(P.cliente||"—")}</b>`);r("Tipo de cisterna",esc(P.equipamentoId?eqName(P.equipamentoId):"Indiferente"));r("Material",esc(M.mat[c.materialId]?.nome||"Por identificar")+(c.descricao&&c.descricao!==M.mat[c.materialId]?.nome?`<br><small>${esc(c.descricao)}</small>`:""));
+  else if(P.tipo==="cisterna"){const c=P.carga||{};r("Cliente",`<b>${esc(P.cliente||"—")}</b>`);r("Tipo de cisterna",esc(P.equipamentoId?eqName(P.equipamentoId):"Indiferente"));r("Material",c.materialId?esc(M.mat[c.materialId]?.nome||"Por identificar")+(c.descricao&&c.descricao!==M.mat[c.materialId]?.nome?`<br><small>${esc(c.descricao)}</small>`:""):(c.descricao?`${esc(c.descricao)} <span class="chip c-idle">Outro</span>`:"Por identificar"));
     r("Quantidade",`<span class="num">${c.peso!=null?c.peso.toLocaleString("pt-PT")+" t":"—"} · ${P.nCargas||1} carga(s)</span>`);if(P.horaCarga)r("Hora de carga",esc(P.horaCarga));if(P.janelaDescarga)r("Janela de descarga",esc(P.janelaDescarga));}
   else r("Carga",linhasTxt(P));
   if(P.tipo!=="viatura")r(P.tipo==="maquina"?"Origem":P.tipo==="recolha"?"Local de recolha":"Local de carga",`${esc(P.localCarga||"—")}${P.coordCarga?`<br><small>${esc(P.coordCarga)}</small>`:""}`);
@@ -1542,6 +1563,7 @@ const A={
     const add=(P.maquinas||[]).map(m=>({tipo:m.classe,num:m.num,orig:P.localCarga||"",dest:P.localDescarga||"",disp:P.maqDisp?toInput(P.maqDisp):"",entregar:P.pretendidaEm?toInput(P.pretendidaEm):"",obs:`${P.numero} · ${M.obra[P.obraId]?.codigo||""}`,src:"pedido",pedidoId:P.id,pedNum:P.numero}));
     await W(()=>db.doc("sl/req").set({v:[...cur,...add]}),`${add.length} máquina(s) de ${P.numero} enviadas para o planeador de rotas.`);
     await savePed(P,{planeador:{enviadoEm:nowISO(),por:S.me.id,n:add.length},historico:hist(P,P.planeador?"Reenviado para o planeador de rotas":"Enviado para o planeador de rotas",`${add.length} máquina(s)`)});render();},
+  cliente(id){const x=id?M.cli[id]:null;S.modal={t:"cliente",id:id||null,f:x?{...x,ativo:x.ativo!==false,mat:Object.fromEntries((x.materiais||[]).map(k=>[k,true]))}:{nome:"",contacto:"",obs:"",ativo:true,mat:{}}};render();},
   fornecedor(id){const x=id?M.forn[id]:null;S.modal={t:"fornecedor",id:id||null,f:x?{...x,ativo:x.ativo!==false}:{nome:"",contacto:"",morada:"",obs:"",ativo:true}};render();},
   async addBox(){const v=String(S.tmpBox||"").trim();if(!v)return;const bx=[...(CFG().boxes||[])];if(!bx.includes(v))bx.push(v);await W(()=>db.doc("cfg/geral").set({...CFG(),boxes:bx}),"Box adicionada.");S.tmpBox="";render();},
   async delBox(i){const bx=[...(CFG().boxes||[])];bx.splice(+i,1);await W(()=>db.doc("cfg/geral").set({...CFG(),boxes:bx}),"Box removida.");},
@@ -1550,7 +1572,7 @@ const A={
   editar(id){const p=M.ped[id];const c=p.carga||{};S.form={...novoForm(),id,tipo:p.tipo||"",obraId:p.obraId,logisticaId:p.logisticaId||"",prioridade:p.prioridade||"normal",urgente:p.prioridade==="urgente",categoriaId:p.categoriaId||"",equipamentoId:p.equipamentoId||"",variante:p.variante||"",
     periodoInicio:toInput(p.periodoInicio),periodoFim:toInput(p.periodoFim),box:p.box||"",fornecedorId:p.fornecedorId||(p.fornecedorNome?"__outro":""),fornecedorNome:p.fornecedorNome||"",
     cDesc:c.descricao||"",cMat:c.materialId||"",cC:c.c??"",cL:c.l??"",cA:c.a??"",cPeso:c.peso??"",cVol:c.volumes??"",nCargas:p.nCargas??"1",maquinas:(p.maquinas||[]).map(m=>m.num),maqDisp:toInput(p.maqDisp),kmManual:p.kmManual??"",
-    cliente:p.cliente||"",cHoraCarga:p.horaCarga||"",cJanela:p.janelaDescarga||"",localCarga:p.localCarga||"",localDescarga:p.localDescarga||"",coordCarga:p.coordCarga||"",coordDescarga:p.coordDescarga||"",pretendidaEm:toInput(p.pretendidaEm),instrucoes:p.instrucoes||"",restricoes:p.restricoes||"",anexos:[...(p.anexos||[])],paraAprovacao:p.estado==="Devolvido para correção"||p.estado==="Pendente de aprovação"||!!p.paraAprovacao};
+    cliente:p.cliente||"",clienteId:p.tipo==="cisterna"?(p.clienteId||(S.d.clientes||[]).find(c=>normNome(c.nome)===normNome(p.cliente))?.id||(p.cliente?"__outro":"")):"",cMatOutro:p.tipo==="cisterna"&&!(p.carga&&p.carga.materialId)?(p.carga&&p.carga.descricao)||"":"",cHoraCarga:p.horaCarga||"",cJanela:p.janelaDescarga||"",localCarga:p.localCarga||"",localDescarga:p.localDescarga||"",coordCarga:p.coordCarga||"",coordDescarga:p.coordDescarga||"",pretendidaEm:toInput(p.pretendidaEm),instrucoes:p.instrucoes||"",restricoes:p.restricoes||"",anexos:[...(p.anexos||[])],paraAprovacao:p.estado==="Devolvido para correção"||p.estado==="Pendente de aprovação"||!!p.paraAprovacao};
     S.form._auto={c:S.form.localCarga,d:S.form.localDescarga};S.modal=null;location.hash="novo";render();},
   async submeter(a){const[id,mo]=String(a).split("|");A.editar(id);S.form.paraAprovacao=mo==="aprov";await guardarPed(true);},
   decidir(a){const[id,tipo]=a.split("|");S.modal={t:"decisao",id,tipo,f:{prioridade:M.ped[id].prioridade||"normal",nota:"",motivo:""}};render();},
@@ -1626,6 +1648,11 @@ const A={
     await W(()=>db.collection("convites").doc().set({nome:nm,email:em,perfil:pf,ativo:true,criadoEm:nowISO(),criadoPor:S.me.id}),`Utilizador ${nm} criado. Já pode entrar com ${em}.`);S.cv={perfil:pf};render();},
   pmZona(id){S.modal={t:"pmZona",id,f:{zonaId:(CFG().pmZonas||{})[id]||""}};render();},
   async savePmZona(){const m=S.modal;const z={...(CFG().pmZonas||{}),[m.id]:m.f.zonaId||null};await W(()=>db.doc("cfg/geral").set({...CFG(),pmZonas:z}),`Zona do ${m.id} guardada.`);S.modal=null;render();},
+  async doImpCli(){const I=S.impCli;if(!I)return;const btn=document.querySelector("[data-act=doImpCli]");if(btn)btn.disabled=true;const tt=nowISO();
+    try{const eqC=eqs("cisternas").map(e=>e.id);for(const p of I.prods){if(p.matId)continue;const ref=db.collection("materiais").doc();await ref.set({nome:p.nome,tipo:"material",unidade:"t",equipamentos:eqC,ativo:true,criadoEm:tt,criadoPor:S.me.id});p.matId=ref.id;}
+      let n=0;for(const r of I.rows){const mats=[...new Set(I.prods.filter((p,j)=>r.tem[j]).map(p=>p.matId))];const ex=(S.d.clientes||[]).find(c=>normNome(c.nome)===normNome(r.nome));
+        if(ex)await db.doc("clientes/"+ex.id).update({materiais:mats,alteradoEm:tt,alteradoPor:S.me.id});else await db.collection("clientes").doc().set({nome:r.nome,materiais:mats,ativo:true,contacto:"",obs:"",criadoEm:tt,criadoPor:S.me.id,origemImport:I.nome});n++;}
+      toast(`${n} cliente(s) importados.`);S.impCli=null;S.modal=null;render();}catch(e){console.error(e);toast(errMsg(e),"bad");if(btn)btn.disabled=false;}},
   async doImpCis(){const I=S.impC;if(!I)return;const rows=I.rows.filter(x=>x.inc&&x.data);const btn=document.querySelector("[data-act=doImpCis]");if(btn)btn.disabled=true;let n=0;
     try{for(const x of rows){const numero=await proximoNumero();const tt=nowISO();const ref=db.collection("pedidos").doc();
         const p={numero,tipo:"cisterna",criadoEm:tt,criadoPor:S.me.id,submetidoEm:tt,estado:"Por agendar",paraAprovacao:false,obraId:null,cliente:x.cliente,logisticaId:gestorAutoId({tipo:"cisterna",categoriaId:"cisternas"})||null,prioridade:"normal",categoriaId:"cisternas",equipamentoId:null,variante:"",
@@ -1654,6 +1681,7 @@ const A={
       data={ident:mat,matricula:mat,unidade:f.unidade||"conjunto",empresa:f.empresa||"CPSA",sede:f.sede||"",zonaId:f.zonaId||null,reboques:reb,equipamentoId:f.equipamentoId||eqL[0]||null,equipamentos:eqL,disponibilidade:f.disponibilidade||"disponivel",motorista:f.motorista||"",contacto:String(f.contacto||""),suplente:!!f.suplente,obs:f.obs||"",ativo:!!f.ativo};}
     else if(col==="transportadoras")data={nome:f.nome.trim(),nif:f.nif||"",contacto:f.contacto||"",obs:f.obs||"",ativo:!!f.ativo,equipamentos:Object.keys(f.eqs||{}).filter(k=>f.eqs[k])};
     else if(col==="gestores"){if(!m.id){m.err="Os gestores criam-se em Utilizadores, com o perfil Gestor de logística.";return render();}const on=o=>Object.keys(o||{}).filter(k=>o[k]);data={nome:f.nome.trim(),funcao:f.funcao||"",empresas:on(f.emp),equipamentos:on(f.eq),zonas:on(f.zo),zonaId:null,contacto:String(f.contacto||""),email:f.email||"",utilizadorId:f.utilizadorId||null,conviteId:f.conviteId||null,ativo:!!f.ativo};}
+    else if(col==="clientes"){if(!m.id&&(S.d.clientes||[]).some(c=>normNome(c.nome)===normNome(f.nome))){m.err="Já existe um cliente com este nome.";return render();}data={nome:f.nome.trim(),contacto:f.contacto||"",obs:f.obs||"",ativo:!!f.ativo,materiais:Object.keys(f.mat||{}).filter(k=>f.mat[k])};}
     else if(col==="fornecedores")data={nome:f.nome.trim(),contacto:f.contacto||"",morada:f.morada||"",obs:f.obs||"",ativo:!!f.ativo};
     else if(col==="materiais")data={nome:f.nome.trim(),tipo:f.tipo||"material",unidade:f.unidade||"",caracteristicas:f.caracteristicas||"",ativo:!!f.ativo,equipamentos:Object.keys(f.eqs||{}).filter(k=>f.eqs[k])};
     else if(col==="equipamentos"){if(!f.categoriaId){m.err="Escolha a categoria.";return render();}data={nome:f.nome.trim(),categoriaId:f.categoriaId,ordem:numOr(f.ordem)??99,recolha:!!f.recolha,variantes:String(f.variantesTxt||"").split("\n").map(x=>x.trim()).filter(Boolean),ativo:!!f.ativo};}
@@ -1709,8 +1737,8 @@ async function exportar(w,fmt){const d=exportData(w);const gerado=fmtDT(nowISO()
 function impParse(){const I=S.imp;const rows=XLSX.utils.sheet_to_json(I.wb.Sheets[I.folha],{header:1,raw:true,defval:null});I.res=parseListaViaturas(rows);
   I.plano=I.res?planoImportacao(I.res,S.d.viaturas,PS.pm,Object.keys(M.eq),S.d.zonas):null;}
 /* ========== eliminar registos (só administrador, botão direito) ========== */
-const DEL_COL={cvt:"convites",zon:"zonas",gst:"gestores",forn:"fornecedores",mat:"materiais",cats:"categorias",via:"viaturas",rsol:"viaturas",obr:"obras",trs:"transportadoras",usr:"utilizadores"};
-const COL_LAB={convites:"Utilizador criado",zonas:"Zona",gestores:"Gestor responsável",fornecedores:"Fornecedor",materiais:"Material",categorias:"Categoria",viaturas:"Viatura",obras:"Obra",transportadoras:"Transportadora",utilizadores:"Utilizador",equipamentos:"Tipo de viatura",box:"Box de carga",uni:"Unidade"};
+const DEL_COL={cli:"clientes",cvt:"convites",zon:"zonas",gst:"gestores",forn:"fornecedores",mat:"materiais",cats:"categorias",via:"viaturas",rsol:"viaturas",obr:"obras",trs:"transportadoras",usr:"utilizadores"};
+const COL_LAB={clientes:"Cliente de cisternas",convites:"Utilizador criado",zonas:"Zona",gestores:"Gestor responsável",fornecedores:"Fornecedor",materiais:"Material",categorias:"Categoria",viaturas:"Viatura",obras:"Obra",transportadoras:"Transportadora",utilizadores:"Utilizador",equipamentos:"Tipo de viatura",box:"Box de carga",uni:"Unidade"};
 const DEF_ROUTES=["frota","externos","obras","materiais","utilizadores","configuracoes"];
 function podeEliminar(){return realRole()==="admin"&&!S.sim;}
 function regNome(col,id){if(col==="viaturas"){const v=M.via[id];return v?(v.matricula||v.ident):id;}if(col==="obras"){const o=M.obra[id];return o?`${o.codigo} · ${o.nome}`:id;}
@@ -1721,7 +1749,7 @@ function usosDe(col,id){const P=S.d.pedidos.filter(p=>p.numero),u=[],n=(a,l)=>{i
   else if(col==="categorias"){n(S.d.equipamentos.filter(e=>e.categoriaId===id).length,"tipo(s) de viatura");n(P.filter(p=>p.categoriaId===id).length,"pedido(s)");}
   else if(col==="equipamentos"){n(P.filter(p=>p.equipamentoId===id).length,"pedido(s)");n(S.d.viaturas.filter(v=>vEqs(v).includes(id)).length,"viatura(s)");n(S.d.materiais.filter(m=>(m.equipamentos||[]).includes(id)).length,"material(is)");n(S.d.gestores.filter(g=>gEq(g).includes(id)).length,"gestor(es)");}
   else if(col==="materiais")n(P.filter(p=>p.carga&&p.carga.materialId===id).length,"pedido(s)");
-  else if(col==="fornecedores")n(P.filter(p=>p.fornecedorId===id).length,"pedido(s)");
+  else if(col==="fornecedores")n(P.filter(p=>p.fornecedorId===id).length,"pedido(s)");if(col==="clientes")n(P.filter(p=>p.clienteId===id).length,"pedido(s)");
   else if(col==="transportadoras")n(P.filter(p=>p.recurso&&p.recurso.transportadoraId===id).length,"pedido(s)");
   else if(col==="viaturas")n(P.filter(p=>p.recurso&&p.recurso.viaturaId===id).length,"pedido(s)");
   else if(col==="obras")n(P.filter(p=>p.obraId===id).length,"pedido(s)");
@@ -1743,6 +1771,15 @@ async function syncConvites(){if(!db||!S.me.id||!COLS.every(c=>S.loaded[c]))retu
       await db.doc("convites/"+cv.id).update({usadoPor:a.id,usadoEm:nowISO()});await db.doc("acessos/"+a.id).update({estado:"aprovado"});
       const g=S.d.gestores.find(x=>!x.utilizadorId&&((cv.email&&x.email&&normNome(x.email)===normNome(cv.email))||normNome(x.nome)===normNome(cv.nome)));
       if(g){await db.doc("gestores/"+g.id).update({utilizadorId:a.id});for(const p of S.d.pedidos.filter(p=>p.logisticaId==="g:"+g.id))await db.doc("pedidos/"+p.id).update({logisticaId:a.id}).catch(()=>{});}}catch(e){console.warn(e);}}}
+/* ========== clientes de cisternas: matriz cliente × produto ========== */
+function parseMatrizClientes(rows){const txt=v=>v==null?"":String(v).replace(/\u00a0/g," ").trim();
+  const hi=rows.findIndex(r=>r&&r.slice(1).filter(v=>txt(v)).length>=2);if(hi<0)return null;
+  const H=rows[hi];const cols=[];for(let j=1;j<H.length;j++){if(txt(H[j]))cols.push({j,nome:txt(H[j])});}if(!cols.length)return null;
+  const ms=matsCisterna();const prods=cols.map(c=>{const n=normNome(c.nome);let m=ms.find(x=>normNome(x.nome)===n)||S.d.materiais.find(x=>normNome(x.nome)===n);
+    if(!m){const id=matDeProduto(c.nome);m=id?M.mat[id]:null;}return {nome:c.nome,j:c.j,matId:m?m.id:null};});
+  const marca=v=>{const t=txt(v).toLowerCase();return !!t&&!["-","0","não","nao","n","no","false"].includes(t);};
+  const out=[];rows.slice(hi+1).forEach(r=>{if(!r)return;const nome=txt(r[0]);if(!nome||/^\(.*\)$/.test(nome))return;out.push({nome,tem:prods.map(p=>marca(r[p.j])),existe:(S.d.clientes||[]).some(c=>normNome(c.nome)===normNome(nome))});});
+  return {prods,rows:out};}
 /* ========== pedidos de cisternas (importação Excel) ========== */
 const MAT_CIS=[["Cimento Branco",/branc/],["Filler/Carbo250",/filler|carbo\s*250/],["Carbonato/Carbo1000",/carbonato|carbo/],["Areia",/areia/],["Vidro",/vidro/],["Cimento Cinza",/cimento|\bcem\b|cem\s|cinz/]];
 function matDeProduto(txt){const t=normNome(txt);for(const[nm,rx]of MAT_CIS){if(rx.test(t)){const m=S.d.materiais.find(x=>normNome(x.nome)===normNome(nm));return m?m.id:null;}}return null;}
@@ -1780,6 +1817,10 @@ document.addEventListener("change",async e=>{const t=e.target;if(t.dataset&&t.da
   if(t.dataset&&t.dataset.assign){const pid=t.value;if(!pid)return;const vid=t.dataset.assign;A.agendar(pid);const f=S.modal.f,v=M.via[vid],P=M.ped[pid];f.origem="propria";f.viaturaId=vid;
     if(v){if(!f.motorista)f.motorista=(v.virtual?v.pm.mot:v.motorista)||"";if(!f.equipamentoId)f.equipamentoId=vEqs(v)[0]||"";}
     const ref=P.previstoInicio||P.periodoInicio||P.pretendidaEm;if(!ref||dayKey(ref)!==S.f.ag.data)f.inicio=S.f.ag.data+"T08:00";render();return;}
+  if(t.dataset&&t.dataset.cli){const file=t.files[0];t.value="";if(!file)return;try{await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");const wb=XLSX.read(await file.arrayBuffer());
+      const nm=wb.SheetNames.find(n=>/cistern/i.test(n))||wb.SheetNames[0];const r=parseMatrizClientes(XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:false,defval:null}));
+      if(!r){toast(`A folha “${nm}” não tem o formato esperado (clientes na coluna A, produtos na linha 1).`,"bad");return;}
+      S.impCli={nome:file.name,folha:nm,...r};S.modal={t:"impCli"};render();}catch(e){console.error(e);toast("Não foi possível ler o ficheiro Excel.","bad");}return;}
   if(t.dataset&&t.dataset.cis){const file=t.files[0];t.value="";if(!file)return;try{await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});
       let rows=null;for(const n of wb.SheetNames){const r=parseCisternas(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null}));if(r&&r.length){rows=r;break;}}
       S.impC={nome:file.name,rows:rows||[]};S.modal={t:"impCis"};render();}catch(e){console.error(e);toast("Não foi possível ler o ficheiro Excel.","bad");}return;}
