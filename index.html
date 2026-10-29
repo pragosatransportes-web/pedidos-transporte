@@ -1397,7 +1397,7 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
      ${fld("modal.f.obs","Observações",{type:"textarea"})}${fld("modal.f.ativo","Ativo",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
      `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveSimple" data-a="clientes">Guardar</button>`,true);
   if(m.t==="impCli"){const I=S.impCli;const nov=I.prods.filter(p=>!p.matId);return wrap(`<h2>Importar clientes de cisternas</h2>`,`<p class="muted" style="margin:0">${esc(I.nome)} · folha “${esc(I.folha)}” · ${I.rows.length} cliente(s) · ${I.prods.length} produto(s).</p>
-     ${nov.length?`<div class="note warn">${nov.length} produto(s) ainda não existem em Materiais e vão ser criados para cisternas: ${nov.map(p=>esc(p.nome)).join(", ")}.</div>`:""}
+     ${nov.length?`<div class="note">${nov.length} produto(s) ainda não existem em Materiais e vão ser criados como materiais de cisterna, com o nome exato da matriz: ${nov.map(p=>esc(p.nome)+(p.familiaId?` <small>(família ${esc(M.mat[p.familiaId]?.nome)})</small>`:"")).join(", ")}.</div>`:""}
      <div class="tw"><table class="mx"><thead><tr><th>Cliente</th>${I.prods.map(p=>`<th class="c">${esc(p.nome)}${p.matId&&normNome(M.mat[p.matId]?.nome)!==normNome(p.nome)?`<br><small>→ ${esc(M.mat[p.matId]?.nome)}</small>`:""}</th>`).join("")}</tr></thead><tbody>
      ${I.rows.map(r=>`<tr><td><b>${esc(r.nome)}</b>${r.existe?' <small class="muted">(atualiza)</small>':""}</td>${I.prods.map((p,j)=>`<td class="c">${r.tem[j]?"●":""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`,
      `<button class="btn" data-act="close">Cancelar</button>${I.rows.length?`<button class="btn pri" data-act="doImpCli">Importar ${I.rows.length} cliente(s)</button>`:""}`);}
@@ -1649,7 +1649,7 @@ const A={
   pmZona(id){S.modal={t:"pmZona",id,f:{zonaId:(CFG().pmZonas||{})[id]||""}};render();},
   async savePmZona(){const m=S.modal;const z={...(CFG().pmZonas||{}),[m.id]:m.f.zonaId||null};await W(()=>db.doc("cfg/geral").set({...CFG(),pmZonas:z}),`Zona do ${m.id} guardada.`);S.modal=null;render();},
   async doImpCli(){const I=S.impCli;if(!I)return;const btn=document.querySelector("[data-act=doImpCli]");if(btn)btn.disabled=true;const tt=nowISO();
-    try{const eqC=eqs("cisternas").map(e=>e.id);for(const p of I.prods){if(p.matId)continue;const ref=db.collection("materiais").doc();await ref.set({nome:p.nome,tipo:"material",unidade:"t",equipamentos:eqC,ativo:true,criadoEm:tt,criadoPor:S.me.id});p.matId=ref.id;}
+    try{const eqC=eqs("cisternas").map(e=>e.id);for(const p of I.prods){if(p.matId)continue;const ref=db.collection("materiais").doc();await ref.set({nome:p.nome,tipo:"material",unidade:"t",equipamentos:eqC,ativo:true,familiaId:p.familiaId||null,criadoEm:tt,criadoPor:S.me.id});p.matId=ref.id;}
       let n=0;for(const r of I.rows){const mats=[...new Set(I.prods.filter((p,j)=>r.tem[j]).map(p=>p.matId))];const ex=(S.d.clientes||[]).find(c=>normNome(c.nome)===normNome(r.nome));
         if(ex)await db.doc("clientes/"+ex.id).update({materiais:mats,alteradoEm:tt,alteradoPor:S.me.id});else await db.collection("clientes").doc().set({nome:r.nome,materiais:mats,ativo:true,contacto:"",obs:"",criadoEm:tt,criadoPor:S.me.id,origemImport:I.nome});n++;}
       toast(`${n} cliente(s) importados.`);S.impCli=null;S.modal=null;render();}catch(e){console.error(e);toast(errMsg(e),"bad");if(btn)btn.disabled=false;}},
@@ -1775,9 +1775,9 @@ async function syncConvites(){if(!db||!S.me.id||!COLS.every(c=>S.loaded[c]))retu
 function parseMatrizClientes(rows){const txt=v=>v==null?"":String(v).replace(/\u00a0/g," ").trim();
   const hi=rows.findIndex(r=>r&&r.slice(1).filter(v=>txt(v)).length>=2);if(hi<0)return null;
   const H=rows[hi];const cols=[];for(let j=1;j<H.length;j++){if(txt(H[j]))cols.push({j,nome:txt(H[j])});}if(!cols.length)return null;
-  const ms=matsCisterna();const prods=cols.map(c=>{const n=normNome(c.nome);let m=ms.find(x=>normNome(x.nome)===n)||S.d.materiais.find(x=>normNome(x.nome)===n);
-    if(!m){const id=matDeProduto(c.nome);m=id?M.mat[id]:null;}return {nome:c.nome,j:c.j,matId:m?m.id:null};});
-  const marca=v=>{const t=txt(v).toLowerCase();return !!t&&!["-","0","não","nao","n","no","false"].includes(t);};
+  const ms=matsCisterna();const cmp=x=>normNome(x).replace(/\s+/g,"");const prods=cols.map(c=>{const n=cmp(c.nome);let m=ms.find(x=>cmp(x.nome)===n)||S.d.materiais.find(x=>cmp(x.nome)===n);
+    const fam=matDeProduto(c.nome);return {nome:c.nome,j:c.j,matId:m?m.id:null,familiaId:fam&&(!m||m.id!==fam)?fam:null};});
+  const marca=v=>{const t=txt(v).toLowerCase();if(!t)return false;if(/[❌✗✘✖×]/.test(t)||["-","0","não","nao","n","no","false"].includes(t))return false;return true;};
   const out=[];rows.slice(hi+1).forEach(r=>{if(!r)return;const nome=txt(r[0]);if(!nome||/^\(.*\)$/.test(nome))return;out.push({nome,tem:prods.map(p=>marca(r[p.j])),existe:(S.d.clientes||[]).some(c=>normNome(c.nome)===normNome(nome))});});
   return {prods,rows:out};}
 /* ========== pedidos de cisternas (importação Excel) ========== */
