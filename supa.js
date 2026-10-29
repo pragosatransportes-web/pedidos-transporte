@@ -171,7 +171,7 @@
       nova: ["Nova palavra-passe", "Escreva a nova palavra-passe.", "Guardar"]
     }[mode];
     app.innerHTML = `<div class="lg-wrap"><form class="lg" id="lgf" autocomplete="on">
-      <div class="logo">CP</div><h1>${t[0]}</h1><p>CPSA Transportes · Departamento de Logística</p><p>${t[1]}</p>
+      <div class="logo">CP</div><h1>${t[0]}</h1><p>Pedidos de Transportes · Departamento de Logística</p><p>${t[1]}</p>
       ${msg?`<div class="msg ${bad?"bad":""}">${msg}</div>`:""}
       ${mode!=="nova"?`<label>Email<input id="lg-e" type="email" required autocomplete="username"></label>`:""}
       ${mode!=="recuperar"?`<label>Palavra-passe<input id="lg-p" type="password" required minlength="8" autocomplete="${mode==="entrar"?"current-password":"new-password"}"></label>`:""}

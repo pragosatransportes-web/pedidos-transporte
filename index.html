@@ -355,6 +355,19 @@ tr.click:hover td{background:color-mix(in srgb,var(--accent) 6%,var(--panel))}
 table.perm td.c,table.perm th.c{text-align:center;width:150px}
 table.perm td.c .chk{justify-content:center}
 table.perm tr.grp td{background:var(--panel2);font-weight:700;font-size:12.5px;color:var(--muted)}
+
+/* layout fluido + barra lateral ocultável */
+.content{max-width:none}
+.menu-btn{display:inline-flex}
+@media (min-width:901px){.app.side-off{grid-template-columns:minmax(0,1fr)}.app.side-off .side{display:none}}
+.seg{display:inline-flex;background:var(--panel2);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:none;padding:4px 10px;border-radius:8px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--panel);color:var(--ink);box-shadow:var(--sh)}
+table.plano-lista tr.grp td{background:var(--panel2);font-weight:700}
+table.plano-lista tr.vazio td{color:var(--muted)}
+table.plano-lista td{vertical-align:middle}
+table.plano-lista td[rowspan]{vertical-align:top;border-right:1px solid var(--line)}
+@media (max-width:640px){.pc-head .row{width:100%}}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -370,6 +383,7 @@ table.perm tr.grp td{background:var(--panel2);font-weight:700;font-size:12.5px;c
 <script src="supa.js"></script>
 <script>
 "use strict";
+try{if(localStorage.getItem("cpsa_side")==="off")window.__sideOff=true;window.__planoVista=localStorage.getItem("cpsa_plano")||"";}catch(e){}
 const TEMAS={auto:"Automático (segue o sistema)",light:"Claro",dark:"Escuro"};
 function temaAtual(){try{const t=localStorage.getItem("cpsa_tema");return TEMAS[t]?t:"auto";}catch(e){return "auto";}}
 function temaEfetivo(t){return t==="auto"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):t;}
@@ -427,7 +441,7 @@ const CFG_DEF={toleranciaMin:0,duracaoPadraoH:4,alertaH:24,refPrazo:"previstoFim
 const COLS=["utilizadores","acessos","categorias","equipamentos","materiais","zonas","cfg","obras","viaturas","transportadoras","fornecedores","gestores","pedidos","notificacoes","sl","eliminados","convites"];
 
 /* ========== estado ========== */
-const S={
+const S={sideOff:!!window.__sideOff,
   boot:"loading", me:{id:null,isOwner:false,canEdit:false,canWrite:null,avatar:""},
   sim:null, route:"dashboard", menu:false, notifOpen:false,
   d:Object.fromEntries(COLS.map(c=>[c,[]])), loaded:{}, prof:{}, sort:{}, pg:{}, drill:{},
@@ -757,11 +771,11 @@ function shell(){
   const r=role();const pend=scope().filter(p=>p.estado==="Pendente de aprovação").length;const nn=minhasNotifs().filter(n=>n.em>lidasAte()).length+alertasCalc().length;
   const me=S.me;wantProf([me.id]);
   const banner=S.sim?`<div class="banner"><b>Simulação:</b> está a ver a plataforma como <b>${ROLE_LABEL[S.sim]}</b>. Os dados são reais; as alterações ficam registadas em seu nome. <button class="btn sm" data-act="sim" data-a="">Voltar a Administrador</button></div>`:"";
-  return `<div class="app${can.exp()?"":" noexp"}"><aside class="side ${S.menu?"open":""}" aria-label="Menu principal"><div class="brand"><span class="logo" aria-hidden="true">CP</span><div class="bt"><b>CPSA Transportes</b><span>Departamento de Logística</span></div></div>
+  return `<div class="app${can.exp()?"":" noexp"}${S.sideOff?" side-off":""}"><aside class="side ${S.menu?"open":""}" aria-label="Menu principal"><div class="brand"><span class="logo" aria-hidden="true">CP</span><div class="bt"><b>Pedidos de Transportes</b><span>Departamento de Logística</span></div></div>
   <nav class="nav">${NAV.map(g=>{const subs=g.sub.filter(x=>navVisible(x[0]));const head=g.k&&navVisible(g.k);if(!head&&!subs.length)return"";
     return `<div class="ng">${head?`<a href="#${g.k}" class="ngh ${S.route===g.k?"on":""}"><span>${navIc(g.k)}<span class="nn">${g.n}</span>${g.l}</span></a>`:`<div class="ngh lab"><span class="nn">${g.n}</span>${g.l}</div>`}${subs.map((x,i)=>`<a href="#${x[0]}" class="nsub ${S.route===x[0]?"on":""}"><span>${navIc(x[0])}<span class="nn">${g.n}.${i+1}</span>${x[1]}</span>${x[0]==="aprovacoes"&&pend?`<span class="cnt">${pend}</span>`:""}</a>`).join("")}</div>`;}).join("")}</nav>
   <div class="whoami">${me.avatar?`<img src="${esc(me.avatar)}" alt="">`:`<span class="av" aria-hidden="true">${esc((nome(me.id)||"?").trim().charAt(0).toUpperCase())}</span>`}<div style="min-width:0;flex:1"><b>${esc(nome(me.id))}</b>${esc(ROLE_LABEL[r]||"")}</div><button class="btn sm ghost" onclick="CPSA_SAIR()" title="Terminar sessão">Sair</button></div></aside>
-  <div class="main">${banner}<div class="top"><button class="icon-btn menu-btn" data-act="menu" aria-label="Abrir menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  <div class="main">${banner}<div class="top"><button class="icon-btn menu-btn" data-act="menu" aria-label="Mostrar ou ocultar o menu" title="Mostrar ou ocultar o menu"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
    <div class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="gq" data-b="gq" data-r value="${esc(S.gq)}" placeholder="Pesquisar nº pedido, obra, matrícula, equipamento, material, transportadora" aria-label="Pesquisa global"></div>
    <span style="flex:1"></span>${can.pedido()?`<a class="btn acc" href="#novo" data-act="novo">+ Novo pedido</a>`:""}
    ${(()=>{const t=temaAtual();return `<button class="icon-btn" data-act="tema" title="Tema: ${TEMAS[t]} — clique para mudar" aria-label="Tema: ${TEMAS[t]}">${t==="light"?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>':t==="dark"?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>'}</button>`;})()}
@@ -1086,13 +1100,25 @@ function planoCard(v,peds,d,o={}){const lines=Math.max(5,peds.length+1);const fi
    ${o.titulo?(o.sub?`<div class="pc-s">${esc(o.sub)}</div>`:""):`<div class="pc-s">${esc(vReboques(v)||"—")}  ·  ${mot?esc(mot):'<span class="muted">sem motorista</span>'}</div>`}
    ${o.titulo?"":`<small>${esc([v.empresa||(v.virtual?"CPSA":""),M.zona[vZona(v)]?.nome,v.sede&&normNome(v.sede)!==normNome(M.zona[vZona(v)]?.nome)?v.sede:"",v.suplente?"suplente":"",(v.disponibilidade||"disponivel")==="manutencao"?"em manutenção":(v.disponibilidade==="indisponivel"?"indisponível":"")].filter(Boolean).join(" · "))}</small>`}</header>
   <ol class="pc-l">${peds.map(p=>planoItem(p,d.dia)).join("")}${Array.from({length:fill},()=>`<li class="vz"></li>`).join("")}</ol>${sel}</article>`;}
-function planoHtml(){const d=planoData();
+function planoHtml(){const d=planoData();const vista=S.planoVista||window.__planoVista||"cards";
   const tot=d.grupos.reduce((s,g)=>s+g.cards.length,0),comC=d.grupos.reduce((s,g)=>s+g.cards.filter(c=>c.peds.length).length,0);
   return `<div class="pc-head"><div><span class="pc-title">Plano de cargas</span> <span class="pc-date num">${d.dia.slice(8)} / ${d.dia.slice(5,7)} / ${d.dia.slice(0,4)}</span> <span class="muted">${DIAS[dow(d.dia)]}</span></div>
-   <div class="row"><span class="sum">${d.n} transporte(s) · ${comC} de ${tot} viaturas com cargas${d.porAtribuir.length?` · ${d.porAtribuir.length} por atribuir`:""}</span><button class="btn sm" data-act="expPlano" data-a="pdf">Exportar PDF</button><button class="btn sm" data-act="expPlano" data-a="xlsx">Exportar Excel</button></div></div>
+   <div class="row"><span class="sum">${d.n} transporte(s) · ${comC} de ${tot} viaturas com cargas${d.porAtribuir.length?` · ${d.porAtribuir.length} por atribuir`:""}</span><button class="btn sm" data-act="expPlano" data-a="pdf">Exportar PDF</button><button class="btn sm" data-act="expPlano" data-a="xlsx">Exportar Excel</button><div class="seg" role="group" aria-label="Vista do plano"><button class="${vista==="cards"?"on":""}" data-act="planoVista" data-a="cards" aria-pressed="${vista==="cards"}">Cartões</button><button class="${vista==="lista"?"on":""}" data-act="planoVista" data-a="lista" aria-pressed="${vista==="lista"}">Lista</button></div></div></div>
+  ${vista==="lista"?planoLista(d,tot):`
   ${!tot&&!d.ext.length&&!d.porAtribuir.length?`<div class="empty">${unidadesPlano().length?"Nenhuma viatura ou transporte corresponde aos filtros neste dia.":"Ainda não há viaturas na frota própria. Importe as listas de viaturas em Frota própria."}</div>`:""}
   ${(d.porAtribuir.length||d.ext.length)?`<div class="pc-grid">${d.porAtribuir.length?planoCard({id:"_pa"},d.porAtribuir,d,{titulo:"Por atribuir",sub:"Pedidos do dia sem viatura própria nem transportadora",cls:"pa",sem:true}):""}${d.ext.length?planoCard({id:"_ex"},d.ext,d,{titulo:"Veículos externos",sub:[...new Set(d.ext.map(p=>M.tr[p.recurso?.transportadoraId]?.nome).filter(Boolean))].join(" · "),cls:"ex",sem:true}):""}</div>`:""}
-  ${d.grupos.map(g=>`<h3 class="pc-g">${esc(g.nome)} <span class="muted">(${g.cards.length})</span></h3><div class="pc-grid">${g.cards.map(c=>planoCard(c.v,c.peds,d)).join("")}</div>`).join("")}`;}
+  ${d.grupos.map(g=>`<h3 class="pc-g">${esc(g.nome)} <span class="muted">(${g.cards.length})</span></h3><div class="pc-grid">${g.cards.map(c=>planoCard(c.v,c.peds,d)).join("")}</div>`).join("")}`}`;}
+function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return "";
+  const head=`<tr><th>Viatura</th><th>Tipo</th><th>Reboque</th><th>Motorista</th><th>Hora</th><th>Nº pedido</th><th>Obra / cliente</th><th>Pedido</th><th>Destino</th><th>Estado</th></tr>`;
+  const linhas=(v,peds,lab)=>{const vi=v?`<span class="plate">${esc(v.matricula||v.ident||"")}</span>${v.virtual?` <b>${esc(v.pm.id)}</b>`:""}`:(lab?`<span class="muted">${esc(lab)}</span>`:"");
+    const tp=v?esc(vTag(v)):"",rb=v?esc(vReboques(v)||"—"):"",mo=v?esc((v.virtual?v.pm.mot:v.motorista)||"—"):"";
+    if(!peds.length)return `<tr class="vazio"><td>${vi}</td><td>${tp}</td><td>${rb}</td><td>${mo}</td><td colspan="6" class="muted">Sem cargas</td></tr>`;
+    return peds.map((p,i)=>{const x=itemTxt(p,d.dia);return `<tr class="click" data-act="ped" data-a="${p.id}">${i===0?`<td rowspan="${peds.length}">${vi}</td><td rowspan="${peds.length}">${tp}</td><td rowspan="${peds.length}">${rb}</td><td rowspan="${peds.length}">${mo}</td>`:""}<td class="num">${esc(x.h)}</td><td><span class="pn">${esc(p.numero)}</span></td><td>${esc(destTxt(p))}</td><td>${esc(matDesc(p))}</td><td>${esc(p.localDescarga||"—")}</td><td>${chipE(p.estado)}</td></tr>`;}).join("");};
+  const sec=(t,n,body)=>`<tr class="grp"><td colspan="10">${esc(t)} <span class="muted">(${n})</span></td></tr>${body}`;
+  let b="";if(d.porAtribuir.length)b+=sec("Por atribuir",d.porAtribuir.length,linhas(null,d.porAtribuir,""));
+  if(d.ext.length)b+=sec("Veículos externos",d.ext.length,d.ext.map(p=>linhas(null,[p],M.tr[p.recurso?.transportadoraId]?.nome||"Externo")).join(""));
+  d.grupos.forEach(g=>{b+=sec(g.nome,g.cards.length,g.cards.map(c=>linhas(c.v,c.peds)).join(""));});
+  return `<div class="tw"><table class="plano-lista"><thead>${head}</thead><tbody>${b}</tbody></table></div>`;}
 async function exportPlano(fmt){const d=planoData(),dt=fmtD(d.dia),gerado=fmtDT(nowISO());
   const fl=filtrosTxt(S.f.ag,{eq:"Equipamento",obra:"Obra",gestor:"Gestor",tipo:"Tipo de pedido",zona:"Zona",origem:"Origem",viatura:"Viatura"});
   const cards=[];if(d.porAtribuir.length)cards.push({t1:"POR ATRIBUIR",t2:"Pedidos sem viatura",peds:d.porAtribuir});if(d.ext.length)cards.push({t1:"VEÍCULOS EXTERNOS",t2:"",peds:d.ext});
@@ -1479,7 +1505,8 @@ const A={
   tema(){const ord=["auto","light","dark"];const n=ord[(ord.indexOf(temaAtual())+1)%3];try{localStorage.setItem("cpsa_tema",n);}catch(e){}aplicaTema(n);toast("Tema: "+TEMAS[n]);render();},
   sort(a){const[id,k]=a.split("|");const s=S.sort[id];S.sort[id]={k,d:s&&s.k===k&&s.d==="asc"?"desc":"asc"};S.pg[id]=0;render();},
   page(a){const[id,d]=a.split("|");S.pg[id]=Math.max(0,(S.pg[id]||0)+ +d);render();},
-  menu(){S.menu=!S.menu;render();}, notif(){S.notifOpen=!S.notifOpen;render();},
+  menu(){if(matchMedia("(max-width:900px)").matches){S.menu=!S.menu;}else{S.sideOff=!S.sideOff;try{localStorage.setItem("cpsa_side",S.sideOff?"off":"on");}catch(e){}}render();},
+  planoVista(v){S.planoVista=v;try{localStorage.setItem("cpsa_plano",v);}catch(e){}render();}, notif(){S.notifOpen=!S.notifOpen;render();},
   lidas(){try{localStorage.setItem("notifLidas",nowISO());}catch(e){}render();},
   goto(r){S.notifOpen=false;location.hash=r;},
   ped(id){S.notifOpen=false;openPed(id);}, obraDet(id){S.modal={t:"obraDet",oid:id};render();},
