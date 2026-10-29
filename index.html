@@ -366,7 +366,13 @@ table.perm tr.grp td{background:var(--panel2);font-weight:700;font-size:12.5px;c
 table.plano-lista tr.grp td{background:var(--panel2);font-weight:700}
 table.plano-lista tr.vazio td{color:var(--muted)}
 table.plano-lista td{vertical-align:middle}
-table.plano-lista td[rowspan]{vertical-align:top;border-right:1px solid var(--line)}
+table.plano-lista td.vcell{vertical-align:top;border-right:1px solid var(--line);white-space:nowrap}
+.pl-v{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;border-radius:6px;padding:2px 4px}
+.pl-v:hover{background:var(--panel2)} .pl-v:focus-visible{outline:2px solid var(--focus)}
+.pl-v .chev{color:var(--muted);width:10px;font-size:11px}
+table.plano-lista tr.det td{background:color-mix(in srgb,var(--accent) 6%,var(--panel));font-size:13px;display:table-cell}
+table.plano-lista tr.det td span{display:inline-flex;gap:6px;align-items:baseline;margin-right:22px}
+table.plano-lista tr.det small{font-weight:700}
 @media (max-width:640px){.pc-head .row{width:100%}}
 </style>
 
@@ -1108,17 +1114,19 @@ function planoHtml(){const d=planoData();const vista=S.planoVista||window.__plan
   ${!tot&&!d.ext.length&&!d.porAtribuir.length?`<div class="empty">${unidadesPlano().length?"Nenhuma viatura ou transporte corresponde aos filtros neste dia.":"Ainda não há viaturas na frota própria. Importe as listas de viaturas em Frota própria."}</div>`:""}
   ${(d.porAtribuir.length||d.ext.length)?`<div class="pc-grid">${d.porAtribuir.length?planoCard({id:"_pa"},d.porAtribuir,d,{titulo:"Por atribuir",sub:"Pedidos do dia sem viatura própria nem transportadora",cls:"pa",sem:true}):""}${d.ext.length?planoCard({id:"_ex"},d.ext,d,{titulo:"Veículos externos",sub:[...new Set(d.ext.map(p=>M.tr[p.recurso?.transportadoraId]?.nome).filter(Boolean))].join(" · "),cls:"ex",sem:true}):""}</div>`:""}
   ${d.grupos.map(g=>`<h3 class="pc-g">${esc(g.nome)} <span class="muted">(${g.cards.length})</span></h3><div class="pc-grid">${g.cards.map(c=>planoCard(c.v,c.peds,d)).join("")}</div>`).join("")}`}`;}
-function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return "";
-  const head=`<tr><th>Viatura</th><th>Tipo</th><th>Reboque</th><th>Motorista</th><th>Hora</th><th>Nº pedido</th><th>Obra / cliente</th><th>Pedido</th><th>Destino</th><th>Estado</th></tr>`;
-  const linhas=(v,peds,lab)=>{const vi=v?`<span class="plate">${esc(v.matricula||v.ident||"")}</span>${v.virtual?` <b>${esc(v.pm.id)}</b>`:""}`:(lab?`<span class="muted">${esc(lab)}</span>`:"");
-    const tp=v?esc(vTag(v)):"",rb=v?esc(vReboques(v)||"—"):"",mo=v?esc((v.virtual?v.pm.mot:v.motorista)||"—"):"";
-    if(!peds.length)return `<tr class="vazio"><td>${vi}</td><td>${tp}</td><td>${rb}</td><td>${mo}</td><td colspan="6" class="muted">Sem cargas</td></tr>`;
-    return peds.map((p,i)=>{const x=itemTxt(p,d.dia);return `<tr class="click" data-act="ped" data-a="${p.id}">${i===0?`<td rowspan="${peds.length}">${vi}</td><td rowspan="${peds.length}">${tp}</td><td rowspan="${peds.length}">${rb}</td><td rowspan="${peds.length}">${mo}</td>`:""}<td class="num">${esc(x.h)}</td><td><span class="pn">${esc(p.numero)}</span></td><td>${esc(destTxt(p))}</td><td>${esc(matDesc(p))}</td><td>${esc(p.localDescarga||"—")}</td><td>${chipE(p.estado)}</td></tr>`;}).join("");};
-  const sec=(t,n,body)=>`<tr class="grp"><td colspan="10">${esc(t)} <span class="muted">(${n})</span></td></tr>${body}`;
+function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return "";S.plExp=S.plExp||{};const NC=7;
+  const head=`<tr><th>Viatura</th><th>Hora</th><th>Nº pedido</th><th>Obra / cliente</th><th>Pedido</th><th>Destino</th><th>Estado</th></tr>`;
+  const linhas=(v,peds,lab)=>{const aberto=v&&S.plExp[v.id];const n=Math.max(peds.length,1);
+    const vi=v?`<button class="pl-v" data-act="plExp" data-a="${esc(v.id)}" aria-expanded="${!!aberto}" title="Ver tipo, reboque e motorista"><span class="chev">${aberto?"▾":"▸"}</span><span class="plate">${esc(v.matricula||v.ident||"")}</span></button>`:(lab?`<span class="muted">${esc(lab)}</span>`:"");
+    const det=aberto?`<tr class="det"><td colspan="${NC}"><span><small>Tipo</small> ${esc(vTag(v)||"—")}</span><span><small>Reboque</small> ${esc(vReboques(v)||"—")}</span><span><small>Motorista</small> ${esc((v.virtual?v.pm.mot:v.motorista)||"—")}</span>${v.virtual?`<span><small>Conjunto</small> ${esc(v.pm.id)}</span>`:""}</td></tr>`:"";
+    if(!peds.length)return `<tr class="vazio"><td>${vi}</td><td colspan="${NC-1}" class="muted">Sem cargas</td></tr>${det}`;
+    return peds.map((p,i)=>{const x=itemTxt(p,d.dia);return `<tr class="click" data-act="ped" data-a="${p.id}">${i===0?`<td rowspan="${n}" class="vcell">${vi}</td>`:""}<td class="num">${esc(x.h)}</td><td><span class="pn">${esc(p.numero)}</span></td><td>${esc(destTxt(p))}</td><td>${esc(matDesc(p))}</td><td>${esc(p.localDescarga||"—")}</td><td>${chipE(p.estado)}</td></tr>`;}).join("")+det;};
+  const sec=(t,n,body)=>`<tr class="grp"><td colspan="${NC}">${esc(t)} <span class="muted">(${n})</span></td></tr>${body}`;
   let b="";if(d.porAtribuir.length)b+=sec("Por atribuir",d.porAtribuir.length,linhas(null,d.porAtribuir,""));
   if(d.ext.length)b+=sec("Veículos externos",d.ext.length,d.ext.map(p=>linhas(null,[p],M.tr[p.recurso?.transportadoraId]?.nome||"Externo")).join(""));
   d.grupos.forEach(g=>{b+=sec(g.nome,g.cards.length,g.cards.map(c=>linhas(c.v,c.peds)).join(""));});
-  return `<div class="tw"><table class="plano-lista"><thead>${head}</thead><tbody>${b}</tbody></table></div>`;}
+  const todos=d.grupos.flatMap(g=>g.cards.map(c=>c.v.id));const algum=todos.some(id=>S.plExp[id]);
+  return `<div class="row" style="justify-content:flex-end;margin:-4px 0 6px"><button class="btn sm ghost" data-act="plExpAll" data-a="${algum?"0":"1"}">${algum?"Recolher todas":"Expandir todas"}</button></div><div class="tw"><table class="plano-lista"><thead>${head}</thead><tbody>${b}</tbody></table></div>`;}
 async function exportPlano(fmt){const d=planoData(),dt=fmtD(d.dia),gerado=fmtDT(nowISO());
   const fl=filtrosTxt(S.f.ag,{eq:"Equipamento",obra:"Obra",gestor:"Gestor",tipo:"Tipo de pedido",zona:"Zona",origem:"Origem",viatura:"Viatura"});
   const cards=[];if(d.porAtribuir.length)cards.push({t1:"POR ATRIBUIR",t2:"Pedidos sem viatura",peds:d.porAtribuir});if(d.ext.length)cards.push({t1:"VEÍCULOS EXTERNOS",t2:"",peds:d.ext});
@@ -1506,6 +1514,8 @@ const A={
   sort(a){const[id,k]=a.split("|");const s=S.sort[id];S.sort[id]={k,d:s&&s.k===k&&s.d==="asc"?"desc":"asc"};S.pg[id]=0;render();},
   page(a){const[id,d]=a.split("|");S.pg[id]=Math.max(0,(S.pg[id]||0)+ +d);render();},
   menu(){if(matchMedia("(max-width:900px)").matches){S.menu=!S.menu;}else{S.sideOff=!S.sideOff;try{localStorage.setItem("cpsa_side",S.sideOff?"off":"on");}catch(e){}}render();},
+  plExp(id){S.plExp=S.plExp||{};S.plExp[id]=!S.plExp[id];render();},
+  plExpAll(v){S.plExp={};if(v==="1"){const d=planoData();d.grupos.forEach(g=>g.cards.forEach(c=>S.plExp[c.v.id]=true));}render();},
   planoVista(v){S.planoVista=v;try{localStorage.setItem("cpsa_plano",v);}catch(e){}render();}, notif(){S.notifOpen=!S.notifOpen;render();},
   lidas(){try{localStorage.setItem("notifLidas",nowISO());}catch(e){}render();},
   goto(r){S.notifOpen=false;location.hash=r;},
