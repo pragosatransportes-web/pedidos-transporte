@@ -1811,7 +1811,9 @@ document.addEventListener("click",e=>{const t=e.target.closest("[data-act]");if(
   if(t.tagName!=="A")e.preventDefault();fn(t.dataset.a,t,e);if(t.dataset.act!=="menu"&&S.menu&&t.closest(".nav")){S.menu=false;render();}});
 document.addEventListener("input",e=>{const t=e.target;if(!t.dataset||!t.dataset.b||t.type==="checkbox"||t.tagName==="SELECT")return;setPath(t.dataset.b,t.value);
   if(t.dataset.b==="uq")userSearch();if(t.hasAttribute("data-r"))render();});
+document.addEventListener("focusout",e=>{const t=e.target;if(t&&t._pend){t._pend=false;setTimeout(render,180);}});
 document.addEventListener("change",async e=>{const t=e.target;if(t.dataset&&t.dataset.b){setPath(t.dataset.b,t.type==="checkbox"?t.checked:t.value);
+    if(["date","time","datetime-local"].includes(t.type)){if(t.dataset.b.startsWith("form."))return;if(document.activeElement===t){t._pend=true;return;}}
     if(!(t.tagName==="SELECT"||["checkbox","date","time","datetime-local"].includes(t.type)||t.hasAttribute("data-rc")))return;
     if(t.dataset.b==="form.categoriaId"){S.form.equipamentoId="";S.form.variante="";} if(t.dataset.b==="form.equipamentoId"){S.form.variante="";}
     if(t.dataset.b==="form.obraId")onObraChange(S.form);
