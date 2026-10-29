@@ -379,6 +379,16 @@ table.mx th.c,table.mx td.c{text-align:center;white-space:normal;min-width:70px}
 table.mx .ok-dot{color:var(--ok);font-size:14px}
 
 .dtpair{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:8px;min-width:0}
+
+.ag-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
+.ag-layout.no-side{grid-template-columns:minmax(0,1fr)}
+.ag-main{display:flex;flex-direction:column;gap:18px;min-width:0}
+.ag-side{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto;background:var(--panel);border-radius:var(--r);box-shadow:var(--sh);padding:14px}
+.ag-side .ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ag-list{display:flex;flex-direction:column;gap:8px}
+.ag-it{display:flex;flex-direction:column;gap:4px;padding:10px;border-radius:12px;background:var(--panel2);font-size:13px}
+.ag-it>span{color:var(--muted)} .ag-it .row{gap:6px}
+@media (max-width:1100px){.ag-layout{grid-template-columns:minmax(0,1fr)}.ag-side{position:static;max-height:none}}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -456,7 +466,7 @@ const CFG_DEF={toleranciaMin:0,duracaoPadraoH:4,alertaH:24,refPrazo:"previstoFim
 const COLS=["utilizadores","acessos","categorias","equipamentos","materiais","zonas","cfg","obras","viaturas","transportadoras","fornecedores","gestores","pedidos","notificacoes","sl","eliminados","convites","clientes"];
 
 /* ========== estado ========== */
-const S={sideOff:!!window.__sideOff,
+const S={sideOff:!!window.__sideOff,agSideOff:(()=>{try{return localStorage.getItem("cpsa_agside")==="off";}catch(e){return false;}})(),
   boot:"loading", me:{id:null,isOwner:false,canEdit:false,canWrite:null,avatar:""},
   sim:null, route:"dashboard", menu:false, notifOpen:false,
   d:Object.fromEntries(COLS.map(c=>[c,[]])), loaded:{}, prof:{}, sort:{}, pg:{}, drill:{},
@@ -1036,12 +1046,14 @@ function vAgenda(){const f=S.f.ag;const ps=agFilt(scope());const plan=ps.filter(
      return fld("f.ag.gestor","Gestor responsável",{type:"select",opts:optGestores()})+fld("f.ag.eq","Tipo de viatura",{type:"select",opts:optTipoViatura(eqO)})+fld("f.ag.empresa","Empresa",{type:"select",opts:[["","Todas"]].concat(emO)})+fld("f.ag.zona","Zona operacional",{type:"select",opts:[["","Todas"]].concat(zO.map(z=>[z.id,z.nome]))});})()}
    ${fld("f.ag.obra","Obra",{type:"select",opts:optObras("Todas",true)})}${fld("f.ag.tipo","Tipo de pedido",{type:"select",opts:optTipos()})}${fld("f.ag.viatura","Viatura",{type:"select",opts:opt0("Todas").concat(unidadesPlano().map(v=>[v.id,`${v.matricula||v.ident}${v.virtual?" · "+v.pm.id:""} · ${vTag(v)}`]))})}${fld("f.ag.origem","Origem",{type:"select",opts:optOrig})}
    ${f.vista==="plano"?fld("f.ag.soCargas","Só viaturas com cargas",{type:"check"}):""}<button class="btn ghost" data-act="clrf" data-a="ag">Limpar</button></div>
-  <div class="row"><button class="btn" data-act="agNav" data-a="-1" aria-label="Anterior">◀</button><button class="btn" data-act="agNav" data-a="0">Hoje</button><button class="btn" data-act="agNav" data-a="1" aria-label="Seguinte">▶</button>${fld("f.ag.data","Ir para",{type:"date"})}${title?`<h2 style="margin-left:8px">${esc(title)}</h2>`:""}
+  ${(()=>{const side=can.log()&&!S.agSideOff;return `<div class="ag-layout${side?"":" no-side"}">${side?`<aside class="ag-side" aria-label="Pedidos por agendar"><div class="ph"><h3>Por agendar <span class="muted">(${porAg.length})</span></h3><button class="btn sm ghost" data-act="agSide" title="Ocultar painel" aria-label="Ocultar painel">◀</button></div>
+   ${porAg.length?`<div class="ag-list">${porAg.map(p=>`<div class="ag-it"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipAtr(p)}</div><b>${esc(destTxt(p))}</b><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")}</span><small>Pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</small><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido à espera de agendamento.</div>`}</aside>`:""}<div class="ag-main">`;})()}
+  <div class="row">${can.log()&&S.agSideOff?`<button class="btn" data-act="agSide" title="Mostrar pedidos por agendar">Por agendar (${porAg.length}) ▸</button>`:""}<button class="btn" data-act="agNav" data-a="-1" aria-label="Anterior">◀</button><button class="btn" data-act="agNav" data-a="0">Hoje</button><button class="btn" data-act="agNav" data-a="1" aria-label="Seguinte">▶</button>${fld("f.ag.data","Ir para",{type:"date"})}${title?`<h2 style="margin-left:8px">${esc(title)}</h2>`:""}
    <span class="legend" style="margin-left:auto"><span><i style="background:var(--own)"></i>Frota própria</span><span><i style="background:var(--ext)"></i>Externo</span><span><i style="background:var(--idle)"></i>Sem recurso</span></span></div>
   ${body}
-  <div class="grid g2">${can.log()?`<div class="panel"><div class="ph"><h3>Por agendar (${porAg.length})</h3></div>${porAg.length?`<div class="conf">${porAg.map(p=>`<div class="it" style="border-color:var(--line);background:var(--panel2)"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipAtr(p)} <b>${esc(destTxt(p))}</b></div><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")} · pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</span><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido aprovado à espera de agendamento.</div>`}</div>`:""}
+  <div class="grid">
    <div class="panel"><div class="ph"><h3>Conflitos e alertas (${cf.length})</h3></div>${cf.length?`<div class="conf">${cf.map(c=>`<div class="it"><b>${esc(c.tipo)}</b><span>${c.ped.map(p=>`<button class="btn sm ghost" data-act="ped" data-a="${p.id}" style="padding:0 4px">${esc(p.numero)}</button>`).join(" + ")} · ${esc(c.txt)}</span>${can.log()?`<div class="row">${c.ped.length===1&&["Aprovado","Por agendar","Agendado"].includes(c.ped[0].estado)?`<button class="btn sm" data-act="agendar" data-a="${c.ped[0].id}">Resolver no agendamento</button>`:""}<button class="btn sm" data-act="justificar" data-a="${esc(c.key)}">Justificar e manter</button></div>`:""}</div>`).join("")}</div>`:`<div class="empty">Sem conflitos detetados.</div>`}
-   <div class="def">Os alertas não bloqueiam operações. Um conflito justificado deixa de aparecer e a justificação fica no histórico do pedido.</div></div></div>`;}
+   <div class="def">Os alertas não bloqueiam operações. Um conflito justificado deixa de aparecer e a justificação fica no histórico do pedido.</div></div></div></div></div>`;}
 
 /* ========== listas de viaturas (Excel CPSA / Pragosa Transportes) ========== */
 function normPlate(s){let t=String(s==null?"":s).toUpperCase().replace(/\s+/g,"").replace(/[–—]/g,"-");if(/^[A-Z0-9]{6}$/.test(t)&&/\d/.test(t)&&/[A-Z]/.test(t))t=t.slice(0,2)+"-"+t.slice(2,4)+"-"+t.slice(4);return t;}
@@ -1545,6 +1557,7 @@ const A={
   menu(){if(matchMedia("(max-width:900px)").matches){S.menu=!S.menu;}else{S.sideOff=!S.sideOff;try{localStorage.setItem("cpsa_side",S.sideOff?"off":"on");}catch(e){}}render();},
   plExp(id){S.plExp=S.plExp||{};S.plExp[id]=!S.plExp[id];render();},
   plExpAll(v){S.plExp={};if(v==="1"){const d=planoData();d.grupos.forEach(g=>g.cards.forEach(c=>S.plExp[c.v.id]=true));}render();},
+  agSide(){S.agSideOff=!S.agSideOff;try{localStorage.setItem("cpsa_agside",S.agSideOff?"off":"on");}catch(e){}render();},
   planoVista(v){S.planoVista=v;try{localStorage.setItem("cpsa_plano",v);}catch(e){}render();}, notif(){S.notifOpen=!S.notifOpen;render();},
   lidas(){try{localStorage.setItem("notifLidas",nowISO());}catch(e){}render();},
   goto(r){S.notifOpen=false;location.hash=r;},
