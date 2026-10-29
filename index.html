@@ -377,6 +377,8 @@ table.plano-lista tr.det small{font-weight:700}
 
 table.mx th.c,table.mx td.c{text-align:center;white-space:normal;min-width:70px}
 table.mx .ok-dot{color:var(--ok);font-size:14px}
+
+.dtpair{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:8px;min-width:0}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -417,6 +419,10 @@ function dayKey(iso){const p=partsLis(new Date(iso));return `${p.year}-${p.month
 function todayKey(){return dayKey(nowISO());}
 function addDays(k,n){const[y,m,d]=k.split("-").map(Number);const t=new Date(Date.UTC(y,m-1,d+n));return t.toISOString().slice(0,10);}
 function dow(k){const[y,m,d]=k.split("-").map(Number);return (new Date(Date.UTC(y,m-1,d)).getUTCDay()+6)%7;} // 0=seg
+const DT_KEYS=[["pretendidaEm","00:00","pretendidaSemHora"],["periodoInicio","00:00","inicioSemHora"],["periodoFim","23:59","fimSemHora"]];
+function dtSync(F){DT_KEYS.forEach(([k,def])=>{if(F[k+"_d"]===undefined){const v=F[k]||"";F[k+"_d"]=v?v.slice(0,10):"";F[k+"_h"]=v&&!F[k+"_semHora"]?v.slice(11,16):"";}const d=F[k+"_d"],h=F[k+"_h"];F[k]=d?`${d}T${h||def}`:"";F[k+"_semHora"]=!!d&&!h;});}
+function dtFlds(k,label,req,hint){return `<div class="dtpair">${fld(`form.${k}_d`,label,{type:"date",req})}${fld(`form.${k}_h`,"Hora (opcional)",{type:"time",hint})}</div>`;}
+function fmtPed(iso,semHora){return semHora&&iso?fmtD(dayKey(iso)):fmtDT(iso);}
 function fmtDT(iso){if(!iso)return"—";const p=partsLis(new Date(iso));return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;}
 function fmtD(k){if(!k)return"—";const[y,m,d]=k.split("-");return `${d}/${m}/${y}`;}
 function fmtT(iso){const p=partsLis(new Date(iso));return `${p.hour}:${p.minute}`;}
@@ -692,7 +698,7 @@ function conflitos(){const cfg=CFG(),now=Date.now(),out=[];const ps=scope();
       if(v&&v.equipamentoId&&v.equipamentoId!==p.equipamentoId)out.push({key:`teq_${p.id}`,tipo:"Tipo de equipamento diferente do pedido",ped:[p],txt:`${v.ident} é ${eqName(v.equipamentoId)}; pedido de ${eqName(p.equipamentoId)}`});}
     if(!(r.origem==="propria"&&r.viaturaId)&&!(r.origem==="externa"&&(r.transportadoraId||r.matricula)))out.push({key:`sr_${p.id}`,tipo:"Sem viatura ou equipamento atribuído",ped:[p],txt:r.origem==="externa"?"Transportadora por indicar":"Viatura por indicar"});});
   ps.filter(p=>["Pendente de aprovação","Aprovado","Por agendar","Devolvido para correção"].includes(p.estado)&&p.pretendidaEm&&Date.parse(p.pretendidaEm)-now<cfg.alertaH*3600000)
-    .forEach(p=>out.push({key:`np_${p.id}`,tipo:Date.parse(p.pretendidaEm)<now?"Data pretendida ultrapassada sem planeamento":"Próximo da data pretendida e ainda não planeado",ped:[p],txt:`Pretendido para ${fmtDT(p.pretendidaEm)}`}));
+    .forEach(p=>out.push({key:`np_${p.id}`,tipo:Date.parse(p.pretendidaEm)<now?"Data pretendida ultrapassada sem planeamento":"Próximo da data pretendida e ainda não planeado",ped:[p],txt:`Pretendido para ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}`}));
   return out.filter(c=>!c.ped.every(p=>p.justificacoes&&p.justificacoes[c.key]));}
 
 /* ========== notificações ========== */
@@ -846,7 +852,7 @@ function pedFilt(){const f=S.f.ped,q=f.q.trim().toLowerCase();let ps=scope();
     &&inRange(p.criadoEm,f.cDe,f.cAte)&&inRange(p.previstoInicio,f.pDe,f.pAte)&&inRange(p.inicioEfetivo,f.eDe,f.eAte)&&(!f.atraso||emAtraso(p)));}
 function pedCols(){return [{k:"numero",l:"Nº",v:p=>pn(p)},{k:"tipo",l:"Tipo",v:p=>chipT(p),s:p=>TIPO_SHORT[p.tipo]||""},{k:"obra",l:"Obra",v:p=>esc(destTxt(p)),s:p=>destTxt(p)},{k:"zona",l:"Zona",v:p=>esc(M.zona[zonaOf(p)]?.nome||"—"),s:p=>M.zona[zonaOf(p)]?.nome},
   {k:"mat",l:"Pedido",v:p=>resumoHtml(p),s:p=>matDesc(p)},{k:"eq",l:"Equipamento",v:p=>esc(eqTxt(p)),s:p=>eqTxt(p)},
-  {k:"pretendidaEm",l:"Pretendido",v:p=>`<span class="num">${fmtDT(p.pretendidaEm)}</span>`},{k:"previstoInicio",l:"Previsto",v:p=>`<span class="num">${fmtDT(p.previstoInicio)}</span>`},
+  {k:"pretendidaEm",l:"Pretendido",v:p=>`<span class="num">${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</span>`},{k:"previstoInicio",l:"Previsto",v:p=>`<span class="num">${fmtDT(p.previstoInicio)}</span>`},
   {k:"origem",l:"Origem",v:p=>chipO(p),s:p=>origem(p)},{k:"estado",l:"Estado",v:p=>chipE(p.estado)+chipAtr(p),s:p=>ESTADOS.indexOf(p.estado)},{k:"prioridade",l:"Prioridade",v:p=>chipP(p.prioridade),s:p=>PRIO_ORD[p.prioridade]}];}
 function pedTable(id,ps){return tbl(id,pedCols(),ps,{row:"ped",k:"numero",d:"desc",empty:"Nenhum pedido corresponde aos filtros."});}
 function vPedidos(){const f=S.f.ped;const ps=pedFilt();const users=S.d.utilizadores;
@@ -880,7 +886,7 @@ function onObraChange(F){const ol=obraLocal(M.obra[F.obraId]);if(!F.tipo)return;
   {const ob=M.obra[F.obraId],oc=ob&&ob.localizacao||"";if(oc){if(F.tipo==="recolha"){if(!F.coordCarga||F.coordCarga===(F._auto||{}).cc)F.coordCarga=oc;}else if(F.tipo&&F.tipo!=="recolha"){if(!F.coordDescarga||F.coordDescarga===(F._auto||{}).cd)F.coordDescarga=oc;}}}
   F._auto={c:F.localCarga,d:F.localDescarga,cc:F.tipo==="recolha"?F.coordCarga:"",cd:F.tipo!=="recolha"?F.coordDescarga:""};}
 function formAn(F){return{nums:F.maquinas,orig:parseCoords(F.coordCarga)?F.coordCarga:F.localCarga,dest:parseCoords(F.coordDescarga)?F.coordDescarga:F.localDescarga,km:F.kmManual,disp:fromInput(F.maqDisp),entregar:fromInput(F.pretendidaEm)};}
-function vNovo(){if(!can.pedido())return denied();if(!S.form)S.form=novoForm();const F=S.form;const ed=F.id?M.ped[F.id]:null;if(!F.id||F.tipo)autoLogForm(F);
+function vNovo(){if(!can.pedido())return denied();if(!S.form)S.form=novoForm();const F=S.form;const ed=F.id?M.ped[F.id]:null;dtSync(F);if(!F.id||F.tipo)autoLogForm(F);
   const obras=S.d.obras.filter(o=>(o.ativa!==false||o.id===F.obraId)&&obraVisivel(o)).sort((a,b)=>String(a.codigo).localeCompare(b.codigo,"pt"));
   const head=`<div class="phead"><div><h1>${ed?`Editar pedido ${esc(ed.numero)}`:"Novo pedido de transporte"}</h1><p>Escolha o tipo de pedido; o formulário mostra só o que esse pedido precisa. Campos com * são obrigatórios para submeter.</p></div>${ed?`<button class="btn" data-act="cancelForm">Sair sem guardar</button>`:""}</div>
   ${ed&&ed.estado==="Devolvido para correção"?`<div class="note warn"><b>Devolvido para correção:</b> ${esc(ed.motivos?.devolucao||"")}</div>`:""}
@@ -911,7 +917,7 @@ function secTipo(F){const t=F.tipo;let body="";
     body=`${fld("form.categoriaId","Tipo de viatura",{type:"select",req:true,opts:[["","Selecione"]].concat(cats().map(c=>[c.id,c.nome]))})}
      ${fld("form.equipamentoId","Viatura",{type:"select",req:true,dis:!F.categoriaId,opts:[["",F.categoriaId?"Selecione":"Escolha primeiro o tipo"]].concat(eqs(F.categoriaId).map(e=>[e.id,e.nome]))})}
      ${vars.length?fld("form.variante","Variante",{type:"select",req:true,opts:[["","Selecione"]].concat(vars.map(v=>[v,v]))}):""}
-     ${fld("form.periodoInicio","Data e hora de início",{type:"datetime-local",req:true})}${fld("form.periodoFim","Data e hora de fim",{type:"datetime-local",req:true,hint:F.periodoInicio&&F.periodoFim?`Duração: ${fmtDur(Date.parse(fromInput(F.periodoFim))-Date.parse(fromInput(F.periodoInicio)))}`:""})}`;}
+     ${dtFlds("periodoInicio","Data de início",true)}${dtFlds("periodoFim","Data de fim",true,F.periodoInicio&&F.periodoFim?`Duração: ${fmtDur(Date.parse(fromInput(F.periodoFim))-Date.parse(fromInput(F.periodoInicio)))}`:"")}`;}
   else if(t==="armazem"){const bx=CFG().boxes||[];
     body=`${selViatura(false)}${bx.length?fld("form.box","Box de carga",{type:"select",req:true,opts:[["","Selecione"]].concat(bx.map(b=>[b,b]))}):fld("form.box","Box de carga",{req:true,ph:"Ex.: Box 3"})}${secCarga()}${fld("form.urgente","Urgente (pico)",{type:"check",cls:"full"})}`;}
   else if(t==="fornecedor"){const fs=S.d.fornecedores.filter(f=>f.ativo!==false).sort((a,b)=>a.nome.localeCompare(b.nome,"pt"));
@@ -936,7 +942,7 @@ function secLocais(F){const t=F.tipo,mq=t==="maquina";
    ${L[0]?fld("form.localCarga",L[0],{req:t!=="cisterna",hint:t==="cisterna"?"Ex.: Secil Maceira, Carbomin Turquel":"",rc:mq,list:mq?"dl_locais":null})+fld("form.coordCarga","Morada ou coordenadas",{ph:"Opcional"}):""}
    ${fld("form.localDescarga",L[1],{req:true,rc:mq,list:mq?"dl_locais":null})}${fld("form.coordDescarga","Morada ou coordenadas",{ph:"Opcional"})}
    ${mq?fld("form.maqDisp","Máquina disponível a partir de",{type:"datetime-local",hint:"Usada para calcular a hora prevista de entrega."}):""}
-   ${L[2]?fld("form.pretendidaEm",L[2],{type:"datetime-local",req:true}):""}
+   ${L[2]?dtFlds("pretendidaEm",L[2].replace(/ e hora/i,""),true):""}
    ${mq?fld("form.kmManual","Distância (km)",{type:"number",min:0,rc:true,hint:k!=null?`Estimativa pelos Locais do planeador: ${k} km. Deixe vazio para usar esta.`:"Sem coordenadas para estes locais: indique os km ou registe os locais no planeador."}):""}
    </div></section>${mq?`<datalist id="dl_locais">${PS.locais.map(l=>`<option value="${esc(l.nome)}">`).join("")}</datalist>`:""}`;}
 function secObs(F){return `<section class="form-sec"><header><span class="k">5</span><h3>Instruções e anexos</h3></header><div>
@@ -956,7 +962,7 @@ async function guardarPed(submeter){const F=S.form;F.err="";const t=F.tipo;const
   if(!t){F.err="Escolha o tipo de pedido.";return render();}if(!F.obraId&&t!=="cisterna"){F.err="Selecione a obra.";return render();}
   const carga={descricao:String((t==="cisterna"&&F.cMat==="__outro"?(F.cMatOutro||F.cDesc):F.cDesc)||"").trim(),materialId:F.cMat&&F.cMat!=="__outro"?F.cMat:null,c:numOr(F.cC),l:numOr(F.cL),a:numOr(F.cA),peso:numOr(F.cPeso),volumes:numOr(F.cVol)};
   const forn=F.fornecedorId&&F.fornecedorId!=="__outro"?M.forn[F.fornecedorId]:null;const fornNome=forn?forn.nome:String(F.fornecedorNome||"").trim();
-  const pi=fromInput(F.periodoInicio),pf=fromInput(F.periodoFim);
+  dtSync(F);const pi=fromInput(F.periodoInicio),pf=fromInput(F.periodoFim);
   if(t==="viatura"&&pi&&pf&&pf<=pi){F.err="O fim do período tem de ser depois do início.";return render();}
   if(submeter){const miss=[];const need=(c,l)=>{if(!c)miss.push(l);};
     if(t==="viatura"){need(F.categoriaId,"tipo de viatura");need(F.equipamentoId,"viatura");if((M.eq[F.equipamentoId]?.variantes||[]).length)need(F.variante,"variante");need(pi,"início do período");need(pf,"fim do período");}
@@ -969,7 +975,7 @@ async function guardarPed(submeter){const F=S.form;F.err="";const t=F.tipo;const
     if(t==="cisterna"){if(F.clienteId&&F.clienteId!=="__outro")F.cliente=M.cli[F.clienteId]?.nome||F.cliente;need(String(F.cliente||"").trim(),"cliente");need(F.cMat&&(F.cMat!=="__outro"||String(F.cMatOutro||"").trim()),"material");need(numOr(F.nCargas)>=1,"nº de cargas");}
     if(t!=="viatura"&&t!=="cisterna")need(String(F.localCarga||"").trim(),t==="maquina"?"origem":t==="recolha"?"local de recolha":"local de carga");
     need(String(F.localDescarga||"").trim(),t==="viatura"?"local de trabalho":"destino");
-    if(t!=="viatura")need(F.pretendidaEm,"data e hora");
+    if(t!=="viatura")need(F.pretendidaEm,"data");
     if(miss.length){F.err="Para submeter falta preencher: "+miss.join(", ")+".";return render();}}
   const eqId=t==="maquina"?(M.eq["porta-maquinas"]?"porta-maquinas":null):(F.equipamentoId||null);
   let maquinas=null,analise=null;
@@ -982,7 +988,7 @@ async function guardarPed(submeter){const F=S.form;F.err="";const t=F.tipo;const
     carga:["armazem","fornecedor","recolha","cisterna"].includes(t)?(t==="cisterna"?{...carga,descricao:carga.descricao||M.mat[carga.materialId]?.nome||""}:carga):null,nCargas:t==="recolha"||t==="cisterna"?numOr(F.nCargas):null,cliente:t==="cisterna"?String(F.cliente||"").trim():"",clienteId:t==="cisterna"&&F.clienteId&&F.clienteId!=="__outro"?F.clienteId:null,horaCarga:t==="cisterna"?String(F.cHoraCarga||"").trim():"",janelaDescarga:t==="cisterna"?String(F.cJanela||"").trim():"",
     maquinas,analise,maqDisp:t==="maquina"?fromInput(F.maqDisp):null,kmManual:t==="maquina"?numOr(F.kmManual):null,
     localCarga:t==="viatura"?"":String(F.localCarga||"").trim(),localDescarga:String(F.localDescarga||"").trim(),coordCarga:String(F.coordCarga||"").trim(),coordDescarga:String(F.coordDescarga||"").trim(),
-    pretendidaEm:t==="viatura"?pi:fromInput(F.pretendidaEm),instrucoes:F.instrucoes,restricoes:F.restricoes,anexos:F.anexos};
+    pretendidaEm:t==="viatura"?pi:fromInput(F.pretendidaEm),pretendidaSemHora:t==="viatura"?!!F.periodoInicio_semHora:!!F.pretendidaEm_semHora,periodoSemHora:t==="viatura"?{inicio:!!F.periodoInicio_semHora,fim:!!F.periodoFim_semHora}:null,instrucoes:F.instrucoes,restricoes:F.restricoes,anexos:F.anexos};
   const btns=document.querySelectorAll("[data-act=guardarPed]");btns.forEach(b=>b.disabled=true);
   try{let p;
     if(F.id){p=M.ped[F.id];const est=submeter?estSub:p.estado;const patch={...data,paraAprovacao:aprov,estado:est,historico:hist(p,submeter?(p.estado==="Devolvido para correção"?(aprov?"Corrigido e ressubmetido para aprovação":"Corrigido e registado em pedidos"):aprov?"Submetido para aprovação":"Submetido (entra logo em pedidos)"):"Editado")};if(submeter)patch.submetidoEm=nowISO();
@@ -1003,7 +1009,7 @@ function vAprov(){if(!can.log())return denied();const ps=scope().filter(p=>p.est
   return `<div class="phead"><div><h1>Aprovações</h1><p>${ps.length} pedido(s) pendente(s). Só passam por aqui os pedidos submetidos com a opção “Para aprovação”. Os urgentes aparecem primeiro.</p></div></div>
   ${ps.length?ps.map(p=>`<div class="panel" style="${p.prioridade==="urgente"?"box-shadow:inset 3px 0 0 var(--bad)":""}"><div class="ph"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipAtr(p)} <b>${esc(destTxt(p))}</b> <span class="muted">· ${esc(M.zona[zonaOf(p)]?.nome||"")}</span></div>
      <div class="row"><button class="btn" data-act="ped" data-a="${p.id}">Ver detalhe</button><button class="btn" data-act="decidir" data-a="${p.id}|devolver">Devolver para correção</button><button class="btn bad" data-act="decidir" data-a="${p.id}|rejeitar">Rejeitar</button><button class="btn pri" data-act="decidir" data-a="${p.id}|aprovar">Aprovar</button></div></div>
-     <dl class="kv"><dt>Tipo de pedido</dt><dd>${esc(TIPO[p.tipo]?.n||"—")}</dd><dt>Pedido</dt><dd>${resumoHtml(p)}</dd><dt>Trajeto</dt><dd>${p.localCarga?esc(p.localCarga)+" → ":""}${esc(p.localDescarga)}</dd><dt>${p.tipo==="viatura"?"Período":p.tipo==="maquina"?"Entregar até":"Pretendido"}</dt><dd class="num">${p.tipo==="viatura"?`${fmtDT(p.periodoInicio)} → ${fmtDT(p.periodoFim)}`:fmtDT(p.pretendidaEm)}</dd><dt>Submetido</dt><dd>${fmtDT(p.submetidoEm)} por ${esc(nome(p.criadoPor))}</dd>${p.restricoes?`<dt>Restrições</dt><dd>${esc(p.restricoes)}</dd>`:""}</dl></div>`).join(""):`<div class="empty">Não há pedidos pendentes de aprovação.</div>`}
+     <dl class="kv"><dt>Tipo de pedido</dt><dd>${esc(TIPO[p.tipo]?.n||"—")}</dd><dt>Pedido</dt><dd>${resumoHtml(p)}</dd><dt>Trajeto</dt><dd>${p.localCarga?esc(p.localCarga)+" → ":""}${esc(p.localDescarga)}</dd><dt>${p.tipo==="viatura"?"Período":p.tipo==="maquina"?"Entregar até":"Pretendido"}</dt><dd class="num">${p.tipo==="viatura"?`${fmtPed(p.periodoInicio,p.periodoSemHora&&p.periodoSemHora.inicio)} → ${fmtPed(p.periodoFim,p.periodoSemHora&&p.periodoSemHora.fim)}`:fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</dd><dt>Submetido</dt><dd>${fmtDT(p.submetidoEm)} por ${esc(nome(p.criadoPor))}</dd>${p.restricoes?`<dt>Restrições</dt><dd>${esc(p.restricoes)}</dd>`:""}</dl></div>`).join(""):`<div class="empty">Não há pedidos pendentes de aprovação.</div>`}
   ${dev.length?`<h2>Devolvidos para correção (${dev.length})</h2>${pedTable("dev",dev)}`:""}`;}
 function linhasTxt(p){return (p.linhas||[]).map(l=>`${esc(M.mat[l.materialId]?.nome||l.descricao||"—")}${l.quantidade!=null?` · <span class="num">${l.quantidade.toLocaleString("pt-PT")} ${esc(l.unidade||"")}</span>`:""}${l.peso!=null?` · ${l.peso.toLocaleString("pt-PT")} t`:""}${l.dimensoes?` · ${esc(l.dimensoes)}`:""}`).join("<br>")||"—";}
 
@@ -1033,7 +1039,7 @@ function vAgenda(){const f=S.f.ag;const ps=agFilt(scope());const plan=ps.filter(
   <div class="row"><button class="btn" data-act="agNav" data-a="-1" aria-label="Anterior">◀</button><button class="btn" data-act="agNav" data-a="0">Hoje</button><button class="btn" data-act="agNav" data-a="1" aria-label="Seguinte">▶</button>${fld("f.ag.data","Ir para",{type:"date"})}${title?`<h2 style="margin-left:8px">${esc(title)}</h2>`:""}
    <span class="legend" style="margin-left:auto"><span><i style="background:var(--own)"></i>Frota própria</span><span><i style="background:var(--ext)"></i>Externo</span><span><i style="background:var(--idle)"></i>Sem recurso</span></span></div>
   ${body}
-  <div class="grid g2">${can.log()?`<div class="panel"><div class="ph"><h3>Por agendar (${porAg.length})</h3></div>${porAg.length?`<div class="conf">${porAg.map(p=>`<div class="it" style="border-color:var(--line);background:var(--panel2)"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipAtr(p)} <b>${esc(destTxt(p))}</b></div><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")} · pretendido ${fmtDT(p.pretendidaEm)}</span><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido aprovado à espera de agendamento.</div>`}</div>`:""}
+  <div class="grid g2">${can.log()?`<div class="panel"><div class="ph"><h3>Por agendar (${porAg.length})</h3></div>${porAg.length?`<div class="conf">${porAg.map(p=>`<div class="it" style="border-color:var(--line);background:var(--panel2)"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipAtr(p)} <b>${esc(destTxt(p))}</b></div><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")} · pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</span><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido aprovado à espera de agendamento.</div>`}</div>`:""}
    <div class="panel"><div class="ph"><h3>Conflitos e alertas (${cf.length})</h3></div>${cf.length?`<div class="conf">${cf.map(c=>`<div class="it"><b>${esc(c.tipo)}</b><span>${c.ped.map(p=>`<button class="btn sm ghost" data-act="ped" data-a="${p.id}" style="padding:0 4px">${esc(p.numero)}</button>`).join(" + ")} · ${esc(c.txt)}</span>${can.log()?`<div class="row">${c.ped.length===1&&["Aprovado","Por agendar","Agendado"].includes(c.ped[0].estado)?`<button class="btn sm" data-act="agendar" data-a="${c.ped[0].id}">Resolver no agendamento</button>`:""}<button class="btn sm" data-act="justificar" data-a="${esc(c.key)}">Justificar e manter</button></div>`:""}</div>`).join("")}</div>`:`<div class="empty">Sem conflitos detetados.</div>`}
    <div class="def">Os alertas não bloqueiam operações. Um conflito justificado deixa de aparecer e a justificação fica no histórico do pedido.</div></div></div>`;}
 
@@ -1355,7 +1361,7 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
   const wrap=(title,body,foot,narrow)=>`<div class="scrim" data-act="closeBg"><div class="drawer ${narrow?"narrow":""}" role="dialog" aria-modal="true" aria-label="${esc(title.replace(/<[^>]+>/g,""))}"><div class="dhd"><div>${title}</div><button class="btn ghost" data-act="close" aria-label="Fechar">✕</button></div><div class="mbody">${body}</div>${foot?`<div class="dft">${foot}</div>`:""}</div></div>`;
   if(m.t==="ped"){if(!P)return wrap("<h2>Pedido</h2>",`<div class="empty">Este pedido não existe ou não está visível para o seu perfil.</div>`);return wrap(`<div class="row">${pn(P)} ${chipT(P)} ${chipE(P.estado)} ${chipP(P.prioridade)}${chipAtr(P)}</div><h2 style="margin-top:6px">${esc(destTxt(P))}</h2>`,pedDetalhe(P),pedAcoes(P));}
   if(m.t==="decisao"){const L={aprovar:["Aprovar pedido","Aprovar","pri"],rejeitar:["Rejeitar pedido","Rejeitar","bad"],devolver:["Devolver para correção","Devolver","pri"]}[m.tipo];
-    return wrap(`<h2>${L[0]} ${esc(P.numero)}</h2>`,`<p class="muted" style="margin:0">${esc(destTxt(P))} · ${esc(eqTxt(P))} · pretendido ${fmtDT(P.pretendidaEm)}</p>
+    return wrap(`<h2>${L[0]} ${esc(P.numero)}</h2>`,`<p class="muted" style="margin:0">${esc(destTxt(P))} · ${esc(eqTxt(P))} · pretendido ${fmtPed(P.pretendidaEm,P.pretendidaSemHora)}</p>
       ${m.tipo==="aprovar"?fld("modal.f.prioridade","Prioridade",{type:"select",opts:PRIOS})+fld("modal.f.nota","Observação (opcional)",{type:"textarea"})+`<div class="note">Depois de aprovado, o pedido fica “Por agendar”. Pode agendá-lo de seguida.</div>`
       :fld("modal.f.motivo",m.tipo==="rejeitar"?"Motivo da rejeição":"O que deve ser corrigido",{type:"textarea",req:true,rows:4})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
       `<button class="btn" data-act="close">Voltar</button>${m.tipo==="aprovar"?`<button class="btn" data-act="doDecisao" data-a="agendar">Aprovar e agendar</button>`:""}<button class="btn ${L[2]}" data-act="doDecisao">${L[1]}</button>`,true);}
@@ -1468,7 +1474,7 @@ function blocoPedido(P){const rows=[];const r=(k,v)=>rows.push(`<dt>${k}</dt><dd
   else r("Carga",linhasTxt(P));
   if(P.tipo!=="viatura")r(P.tipo==="maquina"?"Origem":P.tipo==="recolha"?"Local de recolha":"Local de carga",`${esc(P.localCarga||"—")}${P.coordCarga?`<br><small>${esc(P.coordCarga)}</small>`:""}`);
   r(P.tipo==="viatura"?"Local de trabalho":"Destino",`${esc(P.localDescarga||"—")}${P.coordDescarga?`<br><small>${esc(P.coordDescarga)}</small>`:""}`);
-  if(P.tipo!=="viatura")r(P.tipo==="maquina"?"Entregar até":"Pretendido",`<span class="num">${fmtDT(P.pretendidaEm)}</span>`);
+  if(P.tipo!=="viatura")r(P.tipo==="maquina"?"Entregar até":"Pretendido",`<span class="num">${fmtPed(P.pretendidaEm,P.pretendidaSemHora)}</span>`);
   r("Prioridade",chipP(P.prioridade));if(P.instrucoes)r("Instruções",esc(P.instrucoes));if(P.restricoes)r("Restrições",esc(P.restricoes));r("Anexos",anexosHtml(P.anexos,false));
   return `<dl class="kv">${rows.join("")}</dl>${P.tipo==="maquina"?`<h3 style="margin-top:14px">Análise de transporte</h3>${analiseHtml(analiseMaq(pedAn(P)))}`:""}`;}
 function pedAcoes(P){const b=[];const L=can.log(),e=P.estado;
@@ -1498,7 +1504,7 @@ function agendarBody(P,m){const F=m.f;const eqSel=F.equipamentoId||"";
   if(F.motorista&&ini){const a0=Date.parse(ini),a1=fim?Date.parse(fim):a0+dur;scope().filter(o=>o.id!==P.id&&["Agendado","Em execução"].includes(o.estado)&&o.recurso?.motorista&&o.recurso.motorista.trim().toLowerCase()===F.motorista.trim().toLowerCase()&&o.previstoInicio).forEach(o=>{const b0=Date.parse(o.previstoInicio),b1=fimPrevisto(o);if(a0<b1&&b0<a1)warn.push(`${F.motorista} já tem ${o.numero} à mesma hora.`);});}
   const vLab=v=>v.virtual?`${v.pm.id} · porta-máquinas ${v.pm.pm||""} · ${(v.pm.cap/1000).toFixed(0)} t · ${v.matricula}${vZona(v)?" · "+(M.zona[vZona(v)]?.nome||""):""}`:`${v.matricula||v.ident}${vReboques(v)?" + "+vReboques(v):""} · ${vTag(v)}${vZona(v)?" · "+(M.zona[vZona(v)]?.nome||""):""}${v.motorista?" · "+v.motorista:""}${(v.disponibilidade||"disponivel")!=="disponivel"?" (indisponível)":""}`;const vLabOld=v=>v.virtual?`${v.pm.id} · porta-máquinas ${v.pm.pm||""} · ${(v.pm.cap/1000).toFixed(0)} t · ${v.matricula}`:`${v.ident}${v.matricula?" · "+v.matricula:""} · ${eqName(v.equipamentoId)}${(v.disponibilidade||"disponivel")!=="disponivel"?" (indisponível)":""}`;
   const mots=[...new Set(viaturasAll().map(v=>v.motorista).filter(Boolean))];
-  return `<p class="muted" style="margin:0">${esc(destTxt(P))} · ${chipT(P)} ${esc(matDesc(P)||"—")} · ${P.tipo==="maquina"?"entregar até":"pretendido"} ${fmtDT(P.pretendidaEm)}</p>
+  return `<p class="muted" style="margin:0">${esc(destTxt(P))} · ${chipT(P)} ${esc(matDesc(P)||"—")} · ${P.tipo==="maquina"?"entregar até":"pretendido"} ${fmtPed(P.pretendidaEm,P.pretendidaSemHora)}</p>
   ${P.tipo==="maquina"?`<section class="form-sec"><header><h3>Máquinas e conjuntos</h3></header><div style="display:block">${analiseHtml(A,{usar:true})}<div class="row" style="margin-top:8px"><button class="btn" data-act="toPlaneador" data-a="${P.id}">${P.planeador?"Reenviar":"Enviar"} ao planeador de rotas</button><button class="btn ghost" data-act="abrirPlan">Abrir o planeador</button></div></div></section>`:""}
   <section class="form-sec"><header><h3>Data e hora de execução</h3></header><div>${fld("modal.f.inicio","Início previsto",{type:"datetime-local",req:true})}${fld("modal.f.fim","Conclusão prevista",{type:"datetime-local",hint:`Sem valor, os conflitos usam ${CFG().duracaoPadraoH} h.`})}${fld("modal.f.prioridade","Prioridade",{type:"select",opts:PRIOS})}</div></section>
   <section class="form-sec"><header><h3>Recursos</h3></header><div>${fld("modal.f.equipamentoId","Equipamento a utilizar",{type:"select",opts:[["","—"]].concat(eqs("",true).map(e=>[e.id,`${M.cat[e.categoriaId]?.nome||""} · ${e.nome}`])),hint:P.variante?`Pedido: ${P.variante}`:""})}
@@ -1574,7 +1580,7 @@ const A={
   editar(id){const p=M.ped[id];const c=p.carga||{};S.form={...novoForm(),id,tipo:p.tipo||"",obraId:p.obraId,logisticaId:p.logisticaId||"",prioridade:p.prioridade||"normal",urgente:p.prioridade==="urgente",categoriaId:p.categoriaId||"",equipamentoId:p.equipamentoId||"",variante:p.variante||"",
     periodoInicio:toInput(p.periodoInicio),periodoFim:toInput(p.periodoFim),box:p.box||"",fornecedorId:p.fornecedorId||(p.fornecedorNome?"__outro":""),fornecedorNome:p.fornecedorNome||"",
     cDesc:c.descricao||"",cMat:c.materialId||"",cC:c.c??"",cL:c.l??"",cA:c.a??"",cPeso:c.peso??"",cVol:c.volumes??"",nCargas:p.nCargas??"1",maquinas:(p.maquinas||[]).map(m=>m.num),maqDisp:toInput(p.maqDisp),kmManual:p.kmManual??"",
-    cliente:p.cliente||"",clienteId:p.tipo==="cisterna"?(p.clienteId||(S.d.clientes||[]).find(c=>normNome(c.nome)===normNome(p.cliente))?.id||(p.cliente?"__outro":"")):"",cMatOutro:p.tipo==="cisterna"&&!(p.carga&&p.carga.materialId)?(p.carga&&p.carga.descricao)||"":"",cHoraCarga:p.horaCarga||"",cJanela:p.janelaDescarga||"",localCarga:p.localCarga||"",localDescarga:p.localDescarga||"",coordCarga:p.coordCarga||"",coordDescarga:p.coordDescarga||"",pretendidaEm:toInput(p.pretendidaEm),instrucoes:p.instrucoes||"",restricoes:p.restricoes||"",anexos:[...(p.anexos||[])],paraAprovacao:p.estado==="Devolvido para correção"||p.estado==="Pendente de aprovação"||!!p.paraAprovacao};
+    cliente:p.cliente||"",clienteId:p.tipo==="cisterna"?(p.clienteId||(S.d.clientes||[]).find(c=>normNome(c.nome)===normNome(p.cliente))?.id||(p.cliente?"__outro":"")):"",cMatOutro:p.tipo==="cisterna"&&!(p.carga&&p.carga.materialId)?(p.carga&&p.carga.descricao)||"":"",cHoraCarga:p.horaCarga||"",cJanela:p.janelaDescarga||"",localCarga:p.localCarga||"",localDescarga:p.localDescarga||"",coordCarga:p.coordCarga||"",coordDescarga:p.coordDescarga||"",pretendidaEm:toInput(p.pretendidaEm),pretendidaEm_semHora:!!p.pretendidaSemHora,periodoInicio_semHora:!!(p.periodoSemHora&&p.periodoSemHora.inicio),periodoFim_semHora:!!(p.periodoSemHora&&p.periodoSemHora.fim),instrucoes:p.instrucoes||"",restricoes:p.restricoes||"",anexos:[...(p.anexos||[])],paraAprovacao:p.estado==="Devolvido para correção"||p.estado==="Pendente de aprovação"||!!p.paraAprovacao};
     S.form._auto={c:S.form.localCarga,d:S.form.localDescarga};S.modal=null;location.hash="novo";render();},
   async submeter(a){const[id,mo]=String(a).split("|");A.editar(id);S.form.paraAprovacao=mo==="aprov";await guardarPed(true);},
   decidir(a){const[id,tipo]=a.split("|");S.modal={t:"decisao",id,tipo,f:{prioridade:M.ped[id].prioridade||"normal",nota:"",motivo:""}};render();},
@@ -1659,7 +1665,7 @@ const A={
     try{for(const x of rows){const numero=await proximoNumero();const tt=nowISO();const ref=db.collection("pedidos").doc();
         const p={numero,tipo:"cisterna",criadoEm:tt,criadoPor:S.me.id,submetidoEm:tt,estado:"Por agendar",paraAprovacao:false,obraId:null,cliente:x.cliente,logisticaId:gestorAutoId({tipo:"cisterna",categoriaId:"cisternas"})||null,prioridade:"normal",categoriaId:"cisternas",equipamentoId:null,variante:"",
           carga:{descricao:x.produto,materialId:x.matId||null,c:null,l:null,a:null,peso:x.peso,volumes:null},nCargas:x.nCargas,horaCarga:x.horaCarga,janelaDescarga:x.janela,localCarga:x.localCarga,localDescarga:x.localDescarga,coordCarga:"",coordDescarga:"",
-          pretendidaEm:fromInput(`${x.data}T${x.hora||"00:00"}`),instrucoes:x.obs,restricoes:"",anexos:[],recurso:{},importKey:x.key,origemImport:{ficheiro:I.nome,em:tt},
+          pretendidaEm:fromInput(`${x.data}T${x.hora||"00:00"}`),pretendidaSemHora:!x.hora,instrucoes:x.obs,restricoes:"",anexos:[],recurso:{},importKey:x.key,origemImport:{ficheiro:I.nome,em:tt},
           historico:[{em:tt,por:S.me.id,acao:"Criado",detalhe:`Importado de ${I.nome}`},{em:tt,por:S.me.id,acao:"Submetido (entra logo em pedidos)",detalhe:""}]};
         await ref.set(p);n++;}
       toast(`${n} pedido(s) de cisternas criados.`);S.impC=null;S.modal=null;render();}catch(e){console.error(e);toast(errMsg(e)+` (${n} criados antes do erro)`,"bad");if(btn)btn.disabled=false;}},
@@ -1716,7 +1722,7 @@ function filtrosTxt(f,map){return Object.entries(f).filter(([k,v])=>v&&map[k]).m
 function exportData(w){const FM={q:"Pesquisa",tipo:"Tipo de pedido",estado:"Estado",prioridade:"Prioridade",zona:"Zona",obra:"Obra",cat:"Categoria",eq:"Equipamento",mat:"Material",origem:"Origem",transp:"Transportadora",gestor:"Gestor",cDe:"Criado desde",cAte:"Criado até",pDe:"Previsto desde",pAte:"Previsto até",eDe:"Executado desde",eAte:"Executado até",atraso:"Só em atraso",de:"Desde",ate:"Até",idsLabel:"Seleção"};
   if(w==="ped"){const ps=pedFilt();return{titulo:"Lista de pedidos de transporte",periodo:filtrosTxt(S.f.ped,FM),defs:"Datas em hora de Portugal. Tempos: aprovação = aprovação − submissão; resposta = início efetivo − criação; execução = conclusão − início efetivo.",
     head:["Nº","Tipo","Estado","Prioridade","Obra","Zona","Categoria","Equipamento","Pedido","Local carga","Local descarga","Criado","Submetido","Aprovado","Pretendido","Previsto início","Previsto fim","Início efetivo","Conclusão efetiva","Origem","Viatura/transportadora","Motorista","Custo previsto (€)","Custo efetivo (€)","T. aprovação","T. execução","Em atraso"],
-    rows:ps.sort((a,b)=>String(b.numero).localeCompare(a.numero)).map(p=>[p.numero,TIPO_SHORT[p.tipo]||"",p.estado,p.prioridade,destTxt(p),M.zona[zonaOf(p)]?.nome||"",M.cat[catOf(p)]?.nome||"",eqTxt(p),matDesc(p),p.localCarga,p.localDescarga,fmtDT(p.criadoEm),fmtDT(p.submetidoEm),fmtDT(p.aprovadoEm),fmtDT(p.pretendidaEm),fmtDT(p.previstoInicio),fmtDT(p.previstoFim),fmtDT(p.inicioEfetivo),fmtDT(p.conclusaoEfetiva),
+    rows:ps.sort((a,b)=>String(b.numero).localeCompare(a.numero)).map(p=>[p.numero,TIPO_SHORT[p.tipo]||"",p.estado,p.prioridade,destTxt(p),M.zona[zonaOf(p)]?.nome||"",M.cat[catOf(p)]?.nome||"",eqTxt(p),matDesc(p),p.localCarga,p.localDescarga,fmtDT(p.criadoEm),fmtDT(p.submetidoEm),fmtDT(p.aprovadoEm),fmtPed(p.pretendidaEm,p.pretendidaSemHora),fmtDT(p.previstoInicio),fmtDT(p.previstoFim),fmtDT(p.inicioEfetivo),fmtDT(p.conclusaoEfetiva),
       origem(p)==="externa"?"Externo":origem(p)==="propria"?"Própria":"",recursoTxt(p),p.recurso?.motorista||"",numOr(p.recurso?.custoPrevisto)??"",numOr(p.recurso?.custoEfetivo)??"",fmtDur(tAprov(p)),fmtDur(tExec(p)),emAtraso(p)?"Sim":""])};}
   if(w==="ext"){const f=S.f.ext;const base=applyAF(scope(),f,p=>p.conclusaoEfetiva).filter(isC);const grp=f.tab==="obra"?{fn:p=>p.obraId,n:obraName,l:"Obra"}:f.tab==="zona"?{fn:zonaOf,n:k=>M.zona[k]?.nome||"—",l:"Zona"}:f.tab==="transportadoras"?{fn:p=>p.recurso?.transportadoraId||null,n:k=>M.tr[k]?.nome||"—",l:"Transportadora"}:{fn:p=>p.equipamentoId,n:eqName,l:"Tipo de equipamento"};
     const rows=[...groupBy(base,grp.fn)].map(([k,a])=>{const s=extStats(a);const ce=custoStats(a,"externa");return[grp.n(k),s.n,s.o,s.e,s.p==null?"Sem dados":Math.round(s.p*10)/10,ce.n?ce.total:""];});
@@ -1806,7 +1812,7 @@ document.addEventListener("click",e=>{const t=e.target.closest("[data-act]");if(
 document.addEventListener("input",e=>{const t=e.target;if(!t.dataset||!t.dataset.b||t.type==="checkbox"||t.tagName==="SELECT")return;setPath(t.dataset.b,t.value);
   if(t.dataset.b==="uq")userSearch();if(t.hasAttribute("data-r"))render();});
 document.addEventListener("change",async e=>{const t=e.target;if(t.dataset&&t.dataset.b){setPath(t.dataset.b,t.type==="checkbox"?t.checked:t.value);
-    if(!(t.tagName==="SELECT"||["checkbox","date","datetime-local"].includes(t.type)||t.hasAttribute("data-rc")))return;
+    if(!(t.tagName==="SELECT"||["checkbox","date","time","datetime-local"].includes(t.type)||t.hasAttribute("data-rc")))return;
     if(t.dataset.b==="form.categoriaId"){S.form.equipamentoId="";S.form.variante="";} if(t.dataset.b==="form.equipamentoId"){S.form.variante="";}
     if(t.dataset.b==="form.obraId")onObraChange(S.form);
     if(t.dataset.b==="imp.folha"){S.imp.folha=t.value;impParse();}
