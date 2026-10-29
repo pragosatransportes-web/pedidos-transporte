@@ -389,6 +389,11 @@ table.mx .ok-dot{color:var(--ok);font-size:14px}
 .ag-it{display:flex;flex-direction:column;gap:4px;padding:10px;border-radius:12px;background:var(--panel2);font-size:13px}
 .ag-it>span{color:var(--muted)} .ag-it .row{gap:6px}
 @media (max-width:1100px){.ag-layout{grid-template-columns:minmax(0,1fr)}.ag-side{position:static;max-height:none}}
+
+[data-drag]{cursor:grab} [data-drag].dragging{opacity:.45}
+body.is-dragging [data-drop]{outline:2px dashed color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:-2px}
+[data-drop].drop-over{outline:2px solid var(--accent)!important;background:color-mix(in srgb,var(--accent) 10%,var(--panel))!important}
+.ag-it[draggable=true]:hover{box-shadow:var(--sh)}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -1047,7 +1052,7 @@ function vAgenda(){const f=S.f.ag;const ps=agFilt(scope());const plan=ps.filter(
    ${fld("f.ag.obra","Obra",{type:"select",opts:optObras("Todas",true)})}${fld("f.ag.tipo","Tipo de pedido",{type:"select",opts:optTipos()})}${fld("f.ag.viatura","Viatura",{type:"select",opts:opt0("Todas").concat(unidadesPlano().map(v=>[v.id,`${v.matricula||v.ident}${v.virtual?" · "+v.pm.id:""} · ${vTag(v)}`]))})}${fld("f.ag.origem","Origem",{type:"select",opts:optOrig})}
    ${f.vista==="plano"?fld("f.ag.soCargas","Só viaturas com cargas",{type:"check"}):""}<button class="btn ghost" data-act="clrf" data-a="ag">Limpar</button></div>
   ${(()=>{const side=can.log()&&!S.agSideOff;return `<div class="ag-layout${side?"":" no-side"}">${side?`<aside class="ag-side" aria-label="Pedidos por agendar"><div class="ph"><h3>Por agendar <span class="muted">(${porAg.length})</span></h3><button class="btn sm ghost" data-act="agSide" title="Ocultar painel" aria-label="Ocultar painel">◀</button></div>
-   ${porAg.length?`<div class="ag-list">${porAg.map(p=>`<div class="ag-it"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipAtr(p)}</div><b>${esc(destTxt(p))}</b><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")}</span><small>Pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</small><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido à espera de agendamento.</div>`}</aside>`:""}<div class="ag-main">`;})()}
+   ${porAg.length?`<div class="ag-list">${porAg.map(p=>`<div class="ag-it" draggable="true" data-drag="${p.id}" title="Arraste para uma viatura do plano para agendar"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipAtr(p)}</div><b>${esc(destTxt(p))}</b><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")}</span><small>Pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</small><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido à espera de agendamento.</div>`}</aside>`:""}<div class="ag-main">`;})()}
   <div class="row">${can.log()&&S.agSideOff?`<button class="btn" data-act="agSide" title="Mostrar pedidos por agendar">Por agendar (${porAg.length}) ▸</button>`:""}<button class="btn" data-act="agNav" data-a="-1" aria-label="Anterior">◀</button><button class="btn" data-act="agNav" data-a="0">Hoje</button><button class="btn" data-act="agNav" data-a="1" aria-label="Seguinte">▶</button>${fld("f.ag.data","Ir para",{type:"date"})}${title?`<h2 style="margin-left:8px">${esc(title)}</h2>`:""}
    <span class="legend" style="margin-left:auto"><span><i style="background:var(--own)"></i>Frota própria</span><span><i style="background:var(--ext)"></i>Externo</span><span><i style="background:var(--idle)"></i>Sem recurso</span></span></div>
   ${body}
@@ -1122,11 +1127,11 @@ function planoData(){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
   return{dia,grupos,ext:f.origem==="propria"?[]:ext,porAtribuir:f.origem?[]:[...new Map(porAtribuir.map(p=>[p.id,p])).values()],cand,n:doDia.length};}
 function itemTxt(p,dia){const h=p.previstoInicio&&dayKey(p.previstoInicio)===dia?fmtT(p.previstoInicio):(p.previstoInicio?"cont.":"—");const o=M.obra[p.obraId];return{h,t:`${p.numero} · ${o?o.codigo:""} · ${matDesc(p)}${p.localDescarga?" → "+p.localDescarga:""}`};}
 function planoItem(p,dia){const x=itemTxt(p,dia),o=M.obra[p.obraId];
-  return `<li><button class="pc-i ${p.prioridade==="urgente"?"urg":""}" data-act="ped" data-a="${p.id}"><span class="t num">${esc(x.h)}</span><span class="d"><b>${esc(p.numero)}</b> ${esc(o?o.codigo+" · "+o.nome:"")}<br><span class="x">${esc(matDesc(p)||"—")}${p.localDescarga?" → "+esc(p.localDescarga):""}</span></span>${p.estado!=="Agendado"?chipE(p.estado):chipAtr(p)}</button></li>`;}
+  return `<li${can.log()&&!FINAIS.includes(p.estado)?` draggable="true" data-drag="${p.id}"`:""}><button class="pc-i ${p.prioridade==="urgente"?"urg":""}" data-act="ped" data-a="${p.id}"><span class="t num">${esc(x.h)}</span><span class="d"><b>${esc(p.numero)}</b> ${esc(o?o.codigo+" · "+o.nome:destTxt(p))}<br><span class="x">${esc(matDesc(p)||"—")}${p.localDescarga?" → "+esc(p.localDescarga):""}</span></span>${p.estado!=="Agendado"?chipE(p.estado):chipAtr(p)}</button></li>`;}
 function planoCard(v,peds,d,o={}){const lines=Math.max(5,peds.length+1);const fill=lines-peds.length;
   const sel=can.log()&&!o.sem&&d.cand.length?`<select class="pc-add" data-assign="${esc(v.id)}" aria-label="Atribuir pedido a ${esc(v.ident)}"><option value="">+ Atribuir pedido…</option>${d.cand.map(p=>`<option value="${p.id}">${esc(p.numero)} · ${esc(TIPO_SHORT[p.tipo]||"")} · ${esc(M.obra[p.obraId]?.codigo||"")} · ${fmtDT(p.periodoInicio||p.pretendidaEm)}</option>`).join("")}</select>`:"";
   const mot=v.virtual?v.pm.mot:v.motorista;
-  return `<article class="pc ${o.cls||""} ${v.suplente?"sup":""} ${(v.disponibilidade||"disponivel")!=="disponivel"?"indisp":""}"><header><div class="pc-t">${o.titulo?`<b>${esc(o.titulo)}</b>`:`<span class="plate">${esc(v.matricula||v.ident)}</span>${v.virtual?`<b>${esc(v.pm.id)}</b>`:""}<span class="pc-tag">${esc(vTag(v))}</span>`}</div>
+  return `<article ${!o.sem&&can.log()?`data-drop="${esc(v.id)}"`:""} class="pc ${o.cls||""} ${v.suplente?"sup":""} ${(v.disponibilidade||"disponivel")!=="disponivel"?"indisp":""}"><header><div class="pc-t">${o.titulo?`<b>${esc(o.titulo)}</b>`:`<span class="plate">${esc(v.matricula||v.ident)}</span>${v.virtual?`<b>${esc(v.pm.id)}</b>`:""}<span class="pc-tag">${esc(vTag(v))}</span>`}</div>
    ${o.titulo?(o.sub?`<div class="pc-s">${esc(o.sub)}</div>`:""):`<div class="pc-s">${esc(vReboques(v)||"—")}  ·  ${mot?esc(mot):'<span class="muted">sem motorista</span>'}</div>`}
    ${o.titulo?"":`<small>${esc([v.empresa||(v.virtual?"CPSA":""),M.zona[vZona(v)]?.nome,v.sede&&normNome(v.sede)!==normNome(M.zona[vZona(v)]?.nome)?v.sede:"",v.suplente?"suplente":"",(v.disponibilidade||"disponivel")==="manutencao"?"em manutenção":(v.disponibilidade==="indisponivel"?"indisponível":"")].filter(Boolean).join(" · "))}</small>`}</header>
   <ol class="pc-l">${peds.map(p=>planoItem(p,d.dia)).join("")}${Array.from({length:fill},()=>`<li class="vz"></li>`).join("")}</ol>${sel}</article>`;}
@@ -1143,8 +1148,8 @@ function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return 
   const linhas=(v,peds,lab)=>{const aberto=v&&S.plExp[v.id];const n=Math.max(peds.length,1);
     const vi=v?`<button class="pl-v" data-act="plExp" data-a="${esc(v.id)}" aria-expanded="${!!aberto}" title="Ver tipo, reboque e motorista"><span class="chev">${aberto?"▾":"▸"}</span><span class="plate">${esc(v.matricula||v.ident||"")}</span></button>`:(lab?`<span class="muted">${esc(lab)}</span>`:"");
     const det=aberto?`<tr class="det"><td colspan="${NC}"><span><small>Tipo</small> ${esc(vTag(v)||"—")}</span><span><small>Reboque</small> ${esc(vReboques(v)||"—")}</span><span><small>Motorista</small> ${esc((v.virtual?v.pm.mot:v.motorista)||"—")}</span>${v.virtual?`<span><small>Conjunto</small> ${esc(v.pm.id)}</span>`:""}</td></tr>`:"";
-    if(!peds.length)return `<tr class="vazio"><td>${vi}</td><td colspan="${NC-1}" class="muted">Sem cargas</td></tr>${det}`;
-    return peds.map((p,i)=>{const x=itemTxt(p,d.dia);return `<tr class="click" data-act="ped" data-a="${p.id}">${i===0?`<td rowspan="${n}" class="vcell">${vi}</td>`:""}<td class="num">${esc(x.h)}</td><td><span class="pn">${esc(p.numero)}</span></td><td>${esc(destTxt(p))}</td><td>${esc(matDesc(p))}</td><td>${esc(p.localDescarga||"—")}</td><td>${chipE(p.estado)}</td></tr>`;}).join("")+det;};
+    if(!peds.length)return `<tr class="vazio" ${v&&can.log()?`data-drop="${esc(v.id)}"`:""}><td>${vi}</td><td colspan="${NC-1}" class="muted">Sem cargas</td></tr>${det}`;
+    return peds.map((p,i)=>{const x=itemTxt(p,d.dia);return `<tr class="click" data-act="ped" data-a="${p.id}">${i===0?`<td rowspan="${n}" class="vcell" ${v&&can.log()?`data-drop="${esc(v.id)}"`:""}>${vi}</td>`:""}<td class="num">${esc(x.h)}</td><td><span class="pn">${esc(p.numero)}</span></td><td>${esc(destTxt(p))}</td><td>${esc(matDesc(p))}</td><td>${esc(p.localDescarga||"—")}</td><td>${chipE(p.estado)}</td></tr>`;}).join("")+det;};
   const sec=(t,n,body)=>`<tr class="grp"><td colspan="${NC}">${esc(t)} <span class="muted">(${n})</span></td></tr>${body}`;
   let b="";if(d.porAtribuir.length)b+=sec("Por atribuir",d.porAtribuir.length,linhas(null,d.porAtribuir,""));
   if(d.ext.length)b+=sec("Veículos externos",d.ext.length,d.ext.map(p=>linhas(null,[p],M.tr[p.recurso?.transportadoraId]?.nome||"Externo")).join(""));
@@ -1557,6 +1562,9 @@ const A={
   menu(){if(matchMedia("(max-width:900px)").matches){S.menu=!S.menu;}else{S.sideOff=!S.sideOff;try{localStorage.setItem("cpsa_side",S.sideOff?"off":"on");}catch(e){}}render();},
   plExp(id){S.plExp=S.plExp||{};S.plExp[id]=!S.plExp[id];render();},
   plExpAll(v){S.plExp={};if(v==="1"){const d=planoData();d.grupos.forEach(g=>g.cards.forEach(c=>S.plExp[c.v.id]=true));}render();},
+  assignTo(pid,vid){if(!can.log()||!M.ped[pid])return;A.agendar(pid);const f=S.modal.f,v=M.via[vid],P=M.ped[pid];f.origem="propria";f.viaturaId=vid;
+    if(v){f.motorista=(v.virtual?v.pm.mot:v.motorista)||f.motorista||"";if(!f.equipamentoId||(P.recurso&&P.recurso.viaturaId!==vid))f.equipamentoId=vEqs(v)[0]||f.equipamentoId||"";}
+    const ref=P.previstoInicio||P.periodoInicio||P.pretendidaEm;if(!ref||dayKey(ref)!==S.f.ag.data)f.inicio=S.f.ag.data+"T08:00";render();},
   agSide(){S.agSideOff=!S.agSideOff;try{localStorage.setItem("cpsa_agside",S.agSideOff?"off":"on");}catch(e){}render();},
   planoVista(v){S.planoVista=v;try{localStorage.setItem("cpsa_plano",v);}catch(e){}render();}, notif(){S.notifOpen=!S.notifOpen;render();},
   lidas(){try{localStorage.setItem("notifLidas",nowISO());}catch(e){}render();},
@@ -1824,6 +1832,12 @@ document.addEventListener("click",e=>{const t=e.target.closest("[data-act]");if(
   if(t.tagName!=="A")e.preventDefault();fn(t.dataset.a,t,e);if(t.dataset.act!=="menu"&&S.menu&&t.closest(".nav")){S.menu=false;render();}});
 document.addEventListener("input",e=>{const t=e.target;if(!t.dataset||!t.dataset.b||t.type==="checkbox"||t.tagName==="SELECT")return;setPath(t.dataset.b,t.value);
   if(t.dataset.b==="uq")userSearch();if(t.hasAttribute("data-r"))render();});
+let _dragPid=null;
+document.addEventListener("dragstart",e=>{const t=e.target.closest&&e.target.closest("[data-drag]");if(!t)return;_dragPid=t.dataset.drag;try{e.dataTransfer.setData("text/plain",_dragPid);e.dataTransfer.effectAllowed="move";}catch(x){}t.classList.add("dragging");document.body.classList.add("is-dragging");});
+document.addEventListener("dragend",e=>{document.querySelectorAll(".dragging,.drop-over").forEach(x=>x.classList.remove("dragging","drop-over"));document.body.classList.remove("is-dragging");_dragPid=null;});
+document.addEventListener("dragover",e=>{const t=e.target.closest&&e.target.closest("[data-drop]");if(!t||!_dragPid)return;e.preventDefault();try{e.dataTransfer.dropEffect="move";}catch(x){}document.querySelectorAll(".drop-over").forEach(x=>{if(x!==t)x.classList.remove("drop-over");});t.classList.add("drop-over");});
+document.addEventListener("dragleave",e=>{const t=e.target.closest&&e.target.closest("[data-drop]");if(t&&!t.contains(e.relatedTarget))t.classList.remove("drop-over");});
+document.addEventListener("drop",e=>{const t=e.target.closest&&e.target.closest("[data-drop]");if(!t)return;e.preventDefault();let pid=_dragPid;try{pid=e.dataTransfer.getData("text/plain")||pid;}catch(x){}t.classList.remove("drop-over");document.body.classList.remove("is-dragging");_dragPid=null;if(pid)A.assignTo(pid,t.dataset.drop);});
 document.addEventListener("focusout",e=>{const t=e.target;if(t&&t._pend){t._pend=false;setTimeout(render,180);}});
 document.addEventListener("change",async e=>{const t=e.target;if(t.dataset&&t.dataset.b){setPath(t.dataset.b,t.type==="checkbox"?t.checked:t.value);
     if(["date","time","datetime-local"].includes(t.type)){if(t.dataset.b.startsWith("form."))return;if(document.activeElement===t){t._pend=true;return;}}
@@ -1837,9 +1851,7 @@ document.addEventListener("change",async e=>{const t=e.target;if(t.dataset&&t.da
     if(t.dataset.b==="modal.f.viaturaId"){const v=M.via[t.value];if(v&&v.motorista&&!S.modal.f.motorista)S.modal.f.motorista=v.motorista;}
     if(t.dataset.b.startsWith("f.")||t.dataset.b.startsWith("S."))Object.keys(S.pg).forEach(k=>S.pg[k]=0);
     render();return;}
-  if(t.dataset&&t.dataset.assign){const pid=t.value;if(!pid)return;const vid=t.dataset.assign;A.agendar(pid);const f=S.modal.f,v=M.via[vid],P=M.ped[pid];f.origem="propria";f.viaturaId=vid;
-    if(v){if(!f.motorista)f.motorista=(v.virtual?v.pm.mot:v.motorista)||"";if(!f.equipamentoId)f.equipamentoId=vEqs(v)[0]||"";}
-    const ref=P.previstoInicio||P.periodoInicio||P.pretendidaEm;if(!ref||dayKey(ref)!==S.f.ag.data)f.inicio=S.f.ag.data+"T08:00";render();return;}
+  if(t.dataset&&t.dataset.assign){const pid=t.value;if(!pid)return;A.assignTo(pid,t.dataset.assign);return;}
   if(t.dataset&&t.dataset.cli){const file=t.files[0];t.value="";if(!file)return;try{await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");const wb=XLSX.read(await file.arrayBuffer());
       const nm=wb.SheetNames.find(n=>/cistern/i.test(n))||wb.SheetNames[0];const r=parseMatrizClientes(XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:false,defval:null}));
       if(!r){toast(`A folha “${nm}” não tem o formato esperado (clientes na coluna A, produtos na linha 1).`,"bad");return;}
