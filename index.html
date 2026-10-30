@@ -675,7 +675,8 @@ function gestoresDoPedido(p){return S.d.gestores.filter(g=>gAtivo(g)&&(gEq(g).le
 function filtroGestor(p,id,comCriador){const g=M.gest&&M.gest[id];if(g)return gestorCobrePedido(g,p)||logIds(p).includes("g:"+id)||(!!g.utilizadorId&&logIds(p).includes(g.utilizadorId));return logIds(p).includes(id)||M.obra[p.obraId]?.gestorId===id||(comCriador&&p.criadoPor===id);}
 function obraVisivel(o){if(role()!=="obra")return true;return gestorUser(o)===S.me.id||o.criadoPor===S.me.id;}
 function pedidoVisivel(p){if(role()!=="obra")return true;const o=M.obra[p.obraId];return p.criadoPor===S.me.id||(o&&obraVisivel(o));}
-function podeEditar(p){if(!["Rascunho","Devolvido para correção"].includes(p.estado))return false;return p.criadoPor===S.me.id||can.log();}
+function podeEditar(p){if(FINAIS.includes(p.estado))return false;if(["Rascunho","Devolvido para correção"].includes(p.estado))return p.criadoPor===S.me.id||can.log();if(can.log())return true;return p.criadoPor===S.me.id&&["Pendente de aprovação","Aprovado","Por agendar"].includes(p.estado);}
+const editaSemSubmeter=p=>!!p&&!["Rascunho","Devolvido para correção"].includes(p.estado);
 function podeCancelar(p){if(FINAIS.includes(p.estado))return false;if(can.log())return true;return p.criadoPor===S.me.id&&["Rascunho","Pendente de aprovação","Devolvido para correção"].includes(p.estado);}
 function nome(id){if(!id)return"—";if(String(id).startsWith("g:")){const g=M.gest&&M.gest[id.slice(2)];return g?g.nome:"Gestor removido";}const p=S.prof[id];return (p&&p.name)||M.user[id]?.alcunha||(id===S.me.id?"Eu":"Utilizador");}
 let profPending=new Set(),profTimer=0;
@@ -992,7 +993,8 @@ function vNovo(){if(!can.pedido())return denied();if(!S.form)S.form=novoForm();c
    <div class="fld"><span>Criado</span><div class="num">${ed?`${fmtDT(ed.criadoEm)} · ${esc(nome(ed.criadoPor))}`:"Automático"}</div></div>
    <div class="fld"><span>Estado</span><div>${chipE(ed?.estado||"Rascunho")}</div></div></div></section>`;
   return head+tipos+ident+secTipo(F)+secLocais(F)+secObs(F)+(F.err?`<div class="note bad">${esc(F.err)}</div>`:"")+
-   `<div class="row" style="justify-content:flex-end;align-items:center">${fld("form.paraAprovacao","Para aprovação",{type:"check"})}<small class="muted" style="max-width:48ch">${F.paraAprovacao?"O pedido fica em Aprovações até a Logística o aprovar.":"Sem esta opção, o pedido entra logo na lista de pedidos, por agendar."}</small><button class="btn bad" data-act="anularForm">${F.id?"Cancelar edição":"Anular pedido"}</button><button class="btn" data-act="guardarPed" data-a="0">Guardar rascunho</button><button class="btn pri" data-act="guardarPed" data-a="1">${F.paraAprovacao?"Submeter para aprovação":"Submeter pedido"}</button></div>`;}
+   (editaSemSubmeter(ed)?`<div class="row" style="justify-content:flex-end;align-items:center"><small class="muted" style="max-width:52ch">O pedido mantém o estado “${esc(ed.estado)}”${ed.recurso&&(ed.recurso.viaturaId||ed.recurso.transportadoraId)?" e o agendamento":""}. As alterações ficam registadas no histórico.</small><button class="btn bad" data-act="anularForm">Cancelar edição</button><button class="btn pri" data-act="guardarPed" data-a="e">Guardar alterações</button></div>`:
+   `<div class="row" style="justify-content:flex-end;align-items:center">${fld("form.paraAprovacao","Para aprovação",{type:"check"})}<small class="muted" style="max-width:48ch">${F.paraAprovacao?"O pedido fica em Aprovações até a Logística o aprovar.":"Sem esta opção, o pedido entra logo na lista de pedidos, por agendar."}</small><button class="btn bad" data-act="anularForm">${F.id?"Cancelar edição":"Anular pedido"}</button><button class="btn" data-act="guardarPed" data-a="0">Guardar rascunho</button><button class="btn pri" data-act="guardarPed" data-a="1">${F.paraAprovacao?"Submeter para aprovação":"Submeter pedido"}</button></div>`);}
 function secCarga(){const mats=S.d.materiais.filter(m=>m.ativo!==false);
   return `${fld("form.cDesc","Descrição da carga",{req:true,cls:"full",ph:"Ex.: 12 lancis pré-fabricados, 2 paletes de cimento"})}
    ${mats.length?fld("form.cMat","Material do catálogo",{type:"select",opts:[["","—"]].concat(mats.map(m=>[m.id,m.nome]))}):""}
@@ -1068,7 +1070,7 @@ function maqPicker(F){if(!CAT().length)return `<div class="note warn full">A lis
    ${F.maqModo==="por"&&!F.id?`<div class="tw"><table><thead><tr><th>Máquina</th><th>Origem (obra ou local)</th><th>Destino (obra ou local)</th></tr></thead><tbody>${[...sel].map(n=>{F.maqLoc[n]=F.maqLoc[n]||{o:"",d:""};const k=n.replace(/[^A-Za-z0-9_-]/g,"_");return `<tr><td><b>${esc(maqLabel(maqBy(n)))}</b></td><td><input data-b="form.maqLoc.${esc(n)}.o" id="ml_o_${k}" value="${esc(F.maqLoc[n].o)}" list="dl_maqloc" placeholder="Origem"></td><td><input data-b="form.maqLoc.${esc(n)}.d" id="ml_d_${k}" value="${esc(F.maqLoc[n].d)}" list="dl_maqloc" placeholder="Destino"></td></tr>`;}).join("")}</tbody></table></div>
      <datalist id="dl_maqloc">${[...new Set(PS.locais.map(l=>l.nome).concat(S.d.obras.filter(o=>o.ativa!==false).map(o=>`${o.codigo} · ${o.nome}`)))].map(x=>`<option value="${esc(x)}">`).join("")}</datalist><small>São criados ${sel.size} pedidos, um por máquina, todos para a obra escolhida acima.</small>`:""}</div>`:""}
   <small>* Peso e dimensões estimados pela classe da máquina. Corrigem-se no Auxílio ao planeamento de máquinas › Lista de Equipamentos.</small></div>`;}
-async function guardarPed(submeter){const F=S.form;F.err="";const t=F.tipo;const aprov=!!F.paraAprovacao,estSub=aprov?"Pendente de aprovação":"Por agendar";
+async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tipo;const aprov=!!F.paraAprovacao,estSub=aprov?"Pendente de aprovação":"Por agendar";
   if(!t){F.err="Escolha o tipo de pedido.";return render();}if(!F.obraId&&t!=="cisterna"){F.err="Selecione a obra.";return render();}
   const carga={descricao:String((t==="cisterna"&&F.cMat==="__outro"?(F.cMatOutro||F.cDesc):F.cDesc)||"").trim(),materialId:F.cMat&&F.cMat!=="__outro"?F.cMat:null,c:numOr(F.cC),l:numOr(F.cL),a:numOr(F.cA),peso:numOr(F.cPeso),volumes:numOr(F.cVol)};
   const forn=F.fornecedorId&&F.fornecedorId!=="__outro"?M.forn[F.fornecedorId]:null;const fornNome=forn?forn.nome:String(F.fornecedorNome||"").trim();
@@ -1117,6 +1119,10 @@ async function guardarPed(submeter){const F=S.form;F.err="";const t=F.tipo;const
   const data=datas[0];
   const btns=document.querySelectorAll("[data-act=guardarPed]");btns.forEach(b=>b.disabled=true);
   try{let p;
+    if(F.id&&opt.manter){p=M.ped[F.id];const lab={obraId:"obra",logisticaIds:"gestores",equipamentoId:"tipo de viatura",variante:"variante",periodoInicio:"início do período",periodoFim:"fim do período",localCarga:"local de carga",localDescarga:"destino",pretendidaEm:"data pretendida",prioridade:"prioridade",carga:"carga",linhas:"materiais",maquinas:"máquinas",cliente:"cliente",nCargas:"nº de cargas",box:"box",fornecedorNome:"fornecedor",instrucoes:"instruções",restricoes:"restrições",janelaDescarga:"janela de descarga",horaCarga:"hora de carga"};
+      const nz=v=>(v==null||v===""||(Array.isArray(v)&&!v.length))?null:v;const mud=Object.keys(lab).filter(k=>JSON.stringify(nz(data[k]))!==JSON.stringify(nz(p[k]))).map(k=>lab[k]);
+      const patch={...data,paraAprovacao:!!p.paraAprovacao,estado:p.estado,historico:hist(p,"Editado",mud.length?"Alterado: "+mud.join(", "):"Sem alterações de conteúdo")};
+      await savePed(p,patch,`Pedido ${p.numero} atualizado.`);S.form=null;location.hash="pedidos";openPed(p.id);return;}
     if(F.id){p=M.ped[F.id];const est=submeter?estSub:p.estado;const patch={...data,paraAprovacao:aprov,estado:est,historico:hist(p,submeter?(p.estado==="Devolvido para correção"?(aprov?"Corrigido e ressubmetido para aprovação":"Corrigido e registado em pedidos"):aprov?"Submetido para aprovação":"Submetido (entra logo em pedidos)"):"Editado")};if(submeter)patch.submetidoEm=nowISO();
       await savePed(p,patch);p={...p,...patch};}
     else{const criados=[];const grupo=datas.length>1?rid():null;
@@ -1737,7 +1743,7 @@ const A={
   async addBox(){const v=String(S.tmpBox||"").trim();if(!v)return;const bx=[...(CFG().boxes||[])];if(!bx.includes(v))bx.push(v);await W(()=>db.doc("cfg/geral").set({...CFG(),boxes:bx}),"Box adicionada.");S.tmpBox="";render();},
   async delBox(i){const bx=[...(CFG().boxes||[])];bx.splice(+i,1);await W(()=>db.doc("cfg/geral").set({...CFG(),boxes:bx}),"Box removida.");},
   delAnexo(a){const[t,i]=a.split("|");(t==="form"?S.form.anexos:S.modal.f.comprovativos).splice(+i,1);render();},
-  guardarPed(a){guardarPed(a==="1");},
+  guardarPed(a){if(a==="e")guardarPed(true,{manter:true});else guardarPed(a==="1");},
   editar(id){const p=M.ped[id];const c=p.carga||{};S.form={...novoForm(),id,tipo:p.tipo||"",obraId:p.obraId,logisticaId:p.logisticaId||"",logisticaIds:logIds(p),_logMan:true,vQtd:"1",vExtra:[],mExtra:(p.linhas||[]).slice(1).map(l=>({cDesc:l.descricao||"",cMat:l.materialId||"",cPeso:l.peso??"",cVol:l.volumes??"",cC:l.c??"",cL:l.l??"",cA:l.a??""})),maqModo:"igual",maqLoc:{},prioridade:p.prioridade||"normal",urgente:p.prioridade==="urgente",categoriaId:p.categoriaId||"",equipamentoId:p.equipamentoId||"",variante:p.variante||"",
     periodoInicio:toInput(p.periodoInicio),periodoFim:toInput(p.periodoFim),box:p.box||"",fornecedorId:p.fornecedorId||(p.fornecedorNome?"__outro":""),fornecedorNome:p.fornecedorNome||"",
     cDesc:c.descricao||"",cMat:c.materialId||"",cC:c.c??"",cL:c.l??"",cA:c.a??"",cPeso:c.peso??"",cVol:c.volumes??"",nCargas:p.nCargas??"1",maquinas:(p.maquinas||[]).map(m=>m.num),maqDisp:toInput(p.maqDisp),kmManual:p.kmManual??"",
