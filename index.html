@@ -595,11 +595,11 @@ function realRole(){if(S.me.isOwner)return"admin";const u=M.user?.[S.me.id];if(u
 function role(){const r=realRole();if(r==="admin"&&S.sim)return S.sim;if(r)return r;return S.me.canWrite===false?"consulta":null;}
 /* Acessos por perfil — configuráveis pelo administrador em Utilizadores (cfg/perfis) */
 const PERM_PAG=[["dashboard","1 · Dashboard"],["relatorios","1.1 · Relatórios e análises"],["pedidos","2.1 · Lista de pedidos"],["agenda","3 · Planeamento (plano de cargas e calendário)"],["planeamento","3.1 · Auxílio ao planeamento de máquinas"],["viagens","3.2 · Auxílio aos tempos de viagens"],["frota","4.1 · Frota própria"],["externos","4.2 · Veículos externos"],["obras","4.3 · Obras/Clientes"],["materiais","4.4 · Máquinas e materiais"]];
-const PERM_ACO=[["criar","Criar pedidos","Mostra 2.2 Novo pedido"],["gerir","Gerir todos os pedidos","Aprovar, agendar, editar e cancelar pedidos de outros, importar pedidos de cisternas. Mostra 2.3 Aprovações"],["defs","Editar definições","Criar e editar frota própria, veículos externos, transportadoras e obras"],["exportar","Exportar","Listas e planos em Excel e PDF"]];
+const PERM_ACO=[["criar","Criar pedidos","Mostra 2.2 Novo pedido"],["gerir","Gerir todos os pedidos","Aprovar, agendar, editar e cancelar pedidos de outros, importar pedidos de cisternas. Mostra 2.3 Aprovações"],["obras","Editar obras e clientes","Criar e alterar obras e clientes de cisternas, incluindo importar a matriz de clientes"],["defs","Editar frota e veículos externos","Criar e editar frota própria, veículos externos e transportadoras"],["exportar","Exportar","Listas e planos em Excel e PDF"]];
 const PERFIS_CFG=["logistica","consulta"];
-const PERM_DEF={logistica:{pag:Object.fromEntries(PERM_PAG.map(p=>[p[0],true])),aco:{criar:true,gerir:true,defs:true,exportar:true}},
-  consulta:{pag:Object.fromEntries(PERM_PAG.map(p=>[p[0],true])),aco:{criar:false,gerir:false,defs:false,exportar:true}},
-  obra:{pag:Object.fromEntries(PERM_PAG.map(p=>[p[0],!["frota","planeamento","viagens"].includes(p[0])])),aco:{criar:true,gerir:false,defs:false,exportar:true}}};
+const PERM_DEF={logistica:{pag:Object.fromEntries(PERM_PAG.map(p=>[p[0],true])),aco:{criar:true,gerir:true,obras:true,defs:true,exportar:true}},
+  consulta:{pag:Object.fromEntries(PERM_PAG.map(p=>[p[0],true])),aco:{criar:false,gerir:false,obras:false,defs:false,exportar:true}},
+  obra:{pag:Object.fromEntries(PERM_PAG.map(p=>[p[0],!["frota","planeamento","viagens"].includes(p[0])])),aco:{criar:true,gerir:false,obras:true,defs:false,exportar:true}}};
 function permCfg(){return (S.d.cfg||[]).find(c=>c.id==="perfis")||{};}
 function perm(grp,k,r){r=r||role();if(r==="admin")return true;if(!r)return false;const c=permCfg()[r];const v=c&&c[grp]?c[grp][k]:undefined;if(typeof v==="boolean")return v;const d=PERM_DEF[r];return !!(d&&d[grp]&&d[grp][k]);}
 const ROLES_UI=()=>Object.entries(ROLE_LABEL).filter(r=>r[0]!=="obra");
@@ -607,7 +607,7 @@ const can={
   admin:()=>role()==="admin",
   log:()=>perm("aco","gerir"),
   pedido:()=>perm("aco","criar"),
-  obra:()=>perm("aco","defs"),
+  obra:()=>perm("aco","obras"),
   defs:()=>perm("aco","defs"),
   exp:()=>perm("aco","exportar"),
   write:()=>role()!=="consulta"
@@ -1270,7 +1270,7 @@ function vExternos(){const f=S.f.ext;const all=scope();const base=applyAF(all,f,
   <div class="def">% externa = transportes externos concluídos ÷ transportes concluídos no mesmo grupo e período × 100. Quando não há transportes concluídos mostra “Sem dados”. Pedidos, transportes executados e viaturas utilizadas são contados separadamente.</div>`;}
 
 /* ========== OBRAS ========== */
-function clientesHtml(){const ad=can.admin(),lg=can.log();const ms=matsCisterna();const cl=[...(S.d.clientes||[])].sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt"));
+function clientesHtml(){const ad=can.obra(),lg=can.obra();const ms=matsCisterna();const cl=[...(S.d.clientes||[])].sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt"));
     return `<div class="row" style="justify-content:space-between"><p class="muted" style="margin:0;max-width:80ch">Clientes servidos pela CPSA Cisternas e os produtos que cada um consome. No novo pedido de cisterna, ao escolher o cliente, só aparecem os produtos dele (mais a opção “Outro”).</p>
      <div class="row">${ad?`<label class="btn" for="up_cli">Importar matriz (Excel)<input id="up_cli" type="file" accept=".xlsx,.xls" data-cli="1" hidden></label>`:""}${lg?`<button class="btn pri" data-act="cliente" data-a="">+ Novo cliente</button>`:""}</div></div>
      ${cl.length?`<div class="tw"><table class="mx"><thead><tr><th>Cliente</th>${ms.map(m=>`<th class="c">${esc(m.nome)}</th>`).join("")}<th class="r">Pedidos</th></tr></thead><tbody>
@@ -1423,7 +1423,7 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
     return wrap(`<h2>Justificar conflito</h2>`,`<div class="note warn"><b>${esc(c.tipo)}</b><br>${c.ped.map(p=>esc(p.numero)).join(" + ")} · ${esc(c.txt)}</div>${fld("modal.f.texto","Justificação",{type:"textarea",req:true,ph:"Ex.: as duas cargas seguem na mesma viagem"})}`,`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="doJustificar">Guardar justificação</button>`,true);}
   if(m.t==="obra")return wrap(`<h2>${m.id?"Editar obra":"Nova obra"}</h2>`,obraForm(m),`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveObra">Guardar obra</button>`,true);
   if(m.t==="obraDet"){const o=M.obra[m.oid];if(!o)return wrap("<h2>Obra</h2>",`<div class="empty">Obra não encontrada.</div>`);
-    const canE=can.log()||(role()==="obra"&&gestorUser(o)===S.me.id);
+    const canE=can.obra()||(role()==="obra"&&gestorUser(o)===S.me.id);
     return wrap(`<div class="row"><span class="pn">${esc(o.codigo)}</span>${o.ativa===false?'<span class="chip c-idle">Inativa</span>':'<span class="chip c-ok">Ativa</span>'}</div><h2 style="margin-top:6px">${esc(o.nome)}</h2>`,obraDetalheHtml(o,true),`${canE?`<button class="btn" data-act="obra" data-a="${o.id}">Editar obra</button>`:""}<button class="btn" data-act="obraPeds" data-a="${o.id}">Ver pedidos da obra</button>${can.pedido()&&o.ativa!==false?`<button class="btn pri" data-act="novoObra" data-a="${o.id}">Novo pedido para esta obra</button>`:""}`);}
   if(m.t==="viatura")return wrap(`<h2>${m.id?"Editar viatura":"Nova viatura"}</h2>`,`<div class="grid g2">${fld("modal.f.matricula","Matrícula do trator ou viatura",{req:true,ph:"AA-00-AA"})}${fld("modal.f.unidade","Unidade",{type:"select",opts:[["conjunto","Trator + reboque"],["trator","Trator"],["rigido","Rígido"],["reboque","Reboque sem trator"]]})}
      ${fld("modal.f.empresa","Empresa",{type:"select",opts:[["CPSA","CPSA"],["PTSA","Pragosa Transportes"]]})}${fld("modal.f.sede","Sede do conjunto")}</div>
@@ -1708,7 +1708,7 @@ const A={
     await W(()=>db.collection("convites").doc().set({nome:nm,email:em,perfil:pf,ativo:true,criadoEm:nowISO(),criadoPor:S.me.id}),`Utilizador ${nm} criado. Já pode entrar com ${em}.`);S.cv={perfil:pf};render();},
   pmZona(id){S.modal={t:"pmZona",id,f:{zonaId:(CFG().pmZonas||{})[id]||""}};render();},
   async savePmZona(){const m=S.modal;const z={...(CFG().pmZonas||{}),[m.id]:m.f.zonaId||null};await W(()=>db.doc("cfg/geral").set({...CFG(),pmZonas:z}),`Zona do ${m.id} guardada.`);S.modal=null;render();},
-  async doImpCli(){const I=S.impCli;if(!I)return;const btn=document.querySelector("[data-act=doImpCli]");if(btn)btn.disabled=true;const tt=nowISO();
+  async doImpCli(){const I=S.impCli;if(!I)return;if(!can.admin()&&I.prods.some(p=>!p.matId)){toast(`Há ${I.prods.filter(p=>!p.matId).length} produto(s) novo(s) na matriz. Só o administrador cria materiais: peça-lhe para os criar em Máquinas e materiais ou para importar a matriz.`,"bad");return;}const btn=document.querySelector("[data-act=doImpCli]");if(btn)btn.disabled=true;const tt=nowISO();
     try{const eqC=eqs("cisternas").map(e=>e.id);for(const p of I.prods){if(p.matId)continue;const ref=db.collection("materiais").doc();await ref.set({nome:p.nome,tipo:"material",unidade:"t",equipamentos:eqC,ativo:true,familiaId:p.familiaId||null,criadoEm:tt,criadoPor:S.me.id});p.matId=ref.id;}
       let n=0;for(const r of I.rows){const mats=[...new Set(I.prods.filter((p,j)=>r.tem[j]).map(p=>p.matId))];const ex=(S.d.clientes||[]).find(c=>normNome(c.nome)===normNome(r.nome));
         if(ex)await db.doc("clientes/"+ex.id).update({materiais:mats,alteradoEm:tt,alteradoPor:S.me.id});else await db.collection("clientes").doc().set({nome:r.nome,materiais:mats,ativo:true,contacto:"",obs:"",criadoEm:tt,criadoPor:S.me.id,origemImport:I.nome});n++;}
