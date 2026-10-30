@@ -709,7 +709,14 @@ const origem=p=>p.recurso&&p.recurso.origem;
 /* ===== ocupação diária da frota ===== */
 function diaIntervalo(dia){const a=Date.parse(fromInput(dia+"T00:00"));return [a,Date.parse(fromInput(addDays(dia,1)+"T00:00"))];}
 function diasEntre(a0,a1){const out=[];let k=dayKey(new Date(a0).toISOString()),b=dayKey(new Date(Math.max(a0,a1-1)).toISOString()),g=0;while(k<=b&&g++<31){out.push(k);k=addDays(k,1);}return out;}
-function horasNoDia(a0,a1,dia){if(a0==null||a1==null||a1<=a0)return 0;const[d0,d1]=diaIntervalo(dia);return Math.max(0,Math.min(a1,d1)-Math.max(a0,d0))/3600000;}
+/* Serviço de vários dias: o horário diário é da hora de início à hora de fim, em cada dia de N a N+x */
+function janelaNoDia(a0,a1,dia){if(a0==null||a1==null||a1<=a0)return null;const k0=dayKey(new Date(a0).toISOString()),k1=dayKey(new Date(a1-1).toISOString());if(dia<k0||dia>k1)return null;
+  const[d0,d1]=diaIntervalo(dia);
+  if(k0!==k1){const p0=partsLis(new Date(a0)),p1=partsLis(new Date(a1));const hs=(+p0.hour%24)*60+(+p0.minute),he=(+p1.hour%24)*60+(+p1.minute);
+    if(he>hs){const s=Date.parse(fromInput(`${dia}T${String(Math.floor(hs/60)).padStart(2,"0")}:${String(hs%60).padStart(2,"0")}`)),e=Date.parse(fromInput(`${dia}T${String(Math.floor(he/60)).padStart(2,"0")}:${String(he%60).padStart(2,"0")}`));return [s,e];}}
+  const s=Math.max(a0,d0),e=Math.min(a1,d1);return e>s?[s,e]:null;}
+function horasNoDia(a0,a1,dia){const w=janelaNoDia(a0,a1,dia);return w?(w[1]-w[0])/3600000:0;}
+function sobrepoe(a0,a1,b0,b1){if(a0==null||b0==null||!(a0<b1&&b0<a1))return false;const ks=new Set([...diasEntre(a0,a1)].filter(k=>diasEntre(b0,b1).includes(k)));for(const k of ks){const x=janelaNoDia(a0,a1,k),y=janelaNoDia(b0,b1,k);if(x&&y&&x[0]<y[1]&&y[0]<x[1])return true;}return false;}
 function intPrev(p){return p.previstoInicio?[Date.parse(p.previstoInicio),fimPrevisto(p)]:[null,null];}
 function intReal(p){if(!p.inicioEfetivo)return [null,null];const a=Date.parse(p.inicioEfetivo);return [a,p.conclusaoEfetiva?Date.parse(p.conclusaoEfetiva):(p.estado==="Em execução"?Date.now():null)];}
 function ocupacao(vid,dia,o={}){const J=+CFG().jornadaH||10,X=+CFG().jornadaMaxH||14;const ps=scope().filter(p=>p.id!==o.excluir&&["Agendado","Em execução","Concluído"].includes(p.estado)&&p.recurso&&p.recurso.viaturaId===vid);
@@ -765,7 +772,7 @@ function drill(key,label,list){S.drill[key]={label,ids:list.map(p=>p.id)};return
 function conflitos(){const cfg=CFG(),now=Date.now(),out=[];const ps=scope();
   const act=ps.filter(p=>["Agendado","Em execução"].includes(p.estado)&&p.previstoInicio);
   const win=p=>[Date.parse(p.previstoInicio),fimPrevisto(p)];
-  const pairs=(keyFn,tipo)=>{const g=groupBy(act.filter(keyFn),keyFn);g.forEach((arr,k)=>{arr.sort((a,b)=>win(a)[0]-win(b)[0]);for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){const[a0,a1]=win(arr[i]),[b0]=win(arr[j]);if(b0<a1){
+  const pairs=(keyFn,tipo)=>{const g=groupBy(act.filter(keyFn),keyFn);g.forEach((arr,k)=>{arr.sort((a,b)=>win(a)[0]-win(b)[0]);for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){const[a0,a1]=win(arr[i]),[b0,b1]=win(arr[j]);if(sobrepoe(a0,a1,b0,b1)){
     out.push({key:`${tipo==="Viatura"?"sv":"sm"}_${arr[i].id}_${arr[j].id}`,tipo:tipo==="Viatura"?"Mesma viatura em transportes simultâneos":"Sobreposição do mesmo motorista",ped:[arr[i],arr[j]],txt:tipo==="Viatura"?(M.via[k.slice(2)]?.ident||"Viatura"):k.slice(2)});}}});};
   pairs(p=>p.recurso?.origem==="propria"&&p.recurso.viaturaId?"v:"+p.recurso.viaturaId:null,"Viatura");
   pairs(p=>p.recurso?.motorista?"m:"+p.recurso.motorista.trim().toLowerCase():null,"Motorista");
@@ -1623,10 +1630,10 @@ function agendarBody(P,m){const F=m.f;const eqSel=F.equipamentoId||"";
     if(v&&v.equipamentoId&&eqSel&&v.equipamentoId!==eqSel)warn.push(`${v.ident} é ${eqName(v.equipamentoId)}; o equipamento a utilizar é ${eqName(eqSel)}.`);
     if(v&&v.pm&&A&&A.rank){const r=A.rank.find(x=>x.pm.id===v.pm.id);if(r&&!r.fits)warn.push(`${v.pm.id} não leva esta carga numa só viagem: ${r.why.join(" · ")}.`);}
     const a0=Date.parse(ini),a1=fim?Date.parse(fim):a0+dur;
-    scope().filter(o=>o.id!==P.id&&["Agendado","Em execução"].includes(o.estado)&&o.recurso?.viaturaId===F.viaturaId&&o.previstoInicio).forEach(o=>{const b0=Date.parse(o.previstoInicio),b1=fimPrevisto(o);if(a0<b1&&b0<a1)warn.push(`${v?.ident||"A viatura"} já está atribuída a ${o.numero} (${fmtDT(o.previstoInicio)}).`);});}
+    scope().filter(o=>o.id!==P.id&&["Agendado","Em execução"].includes(o.estado)&&o.recurso?.viaturaId===F.viaturaId&&o.previstoInicio).forEach(o=>{const b0=Date.parse(o.previstoInicio),b1=fimPrevisto(o);if(sobrepoe(a0,a1,b0,b1))warn.push(`${v?.ident||"A viatura"} já está atribuída a ${o.numero} (${fmtDT(o.previstoInicio)}).`);});}
   if(F.origem==="propria"&&F.viaturaId&&ini){const a0=Date.parse(ini),a1=fim?Date.parse(fim):a0+dur;const v=M.via[F.viaturaId];
     diasEntre(a0,a1).forEach(dia=>{const o=ocupacao(F.viaturaId,dia,{excluir:P.id,extra:[a0,a1]});if(o.prev>o.X)warn.push(`Com este serviço, ${v?.ident||"a viatura"} fica com ${hTxt(o.prev)} previstas em ${fmtD(dia)}: acima da jornada máxima de ${hTxt(o.X)}.`);else if(o.prev>o.J)warn.push(`Com este serviço, ${v?.ident||"a viatura"} fica com ${hTxt(o.prev)} previstas em ${fmtD(dia)}: usa extensão (jornada normal ${hTxt(o.J)}).`);});}
-  if(F.motorista&&ini){const a0=Date.parse(ini),a1=fim?Date.parse(fim):a0+dur;scope().filter(o=>o.id!==P.id&&["Agendado","Em execução"].includes(o.estado)&&o.recurso?.motorista&&o.recurso.motorista.trim().toLowerCase()===F.motorista.trim().toLowerCase()&&o.previstoInicio).forEach(o=>{const b0=Date.parse(o.previstoInicio),b1=fimPrevisto(o);if(a0<b1&&b0<a1)warn.push(`${F.motorista} já tem ${o.numero} à mesma hora.`);});}
+  if(F.motorista&&ini){const a0=Date.parse(ini),a1=fim?Date.parse(fim):a0+dur;scope().filter(o=>o.id!==P.id&&["Agendado","Em execução"].includes(o.estado)&&o.recurso?.motorista&&o.recurso.motorista.trim().toLowerCase()===F.motorista.trim().toLowerCase()&&o.previstoInicio).forEach(o=>{const b0=Date.parse(o.previstoInicio),b1=fimPrevisto(o);if(sobrepoe(a0,a1,b0,b1))warn.push(`${F.motorista} já tem ${o.numero} à mesma hora.`);});}
   const vLab=v=>v.virtual?`${v.pm.id} · porta-máquinas ${v.pm.pm||""} · ${(v.pm.cap/1000).toFixed(0)} t · ${v.matricula}${vZona(v)?" · "+(M.zona[vZona(v)]?.nome||""):""}`:`${v.matricula||v.ident}${vReboques(v)?" + "+vReboques(v):""} · ${vTag(v)}${vZona(v)?" · "+(M.zona[vZona(v)]?.nome||""):""}${v.motorista?" · "+v.motorista:""}${(v.disponibilidade||"disponivel")!=="disponivel"?" (indisponível)":""}`;const vLabOld=v=>v.virtual?`${v.pm.id} · porta-máquinas ${v.pm.pm||""} · ${(v.pm.cap/1000).toFixed(0)} t · ${v.matricula}`:`${v.ident}${v.matricula?" · "+v.matricula:""} · ${eqName(v.equipamentoId)}${(v.disponibilidade||"disponivel")!=="disponivel"?" (indisponível)":""}`;
   const mots=[...new Set(viaturasAll().map(v=>v.motorista).filter(Boolean))];
   return `<p class="muted" style="margin:0">${esc(destTxt(P))} · ${chipT(P)} ${esc(matDesc(P)||"—")} · ${P.tipo==="maquina"?"entregar até":"pretendido"} ${fmtPed(P.pretendidaEm,P.pretendidaSemHora)}</p>
