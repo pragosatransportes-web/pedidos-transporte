@@ -403,6 +403,17 @@ body.is-dragging [data-drop]{outline:2px dashed color-mix(in srgb,var(--accent) 
 .occ-bar b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);opacity:.45}
 .occ span{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--muted)} .occ.warn span{color:var(--warn)} .occ.bad span{color:var(--bad);font-weight:700}
 td.vcell .occ{margin-top:4px;max-width:170px}
+
+/* janelas centradas e flutuantes */
+.scrim{justify-content:center;align-items:center;padding:24px;background:rgba(15,21,27,.28);backdrop-filter:none}
+.drawer{width:min(860px,calc(100vw - 48px));height:auto;max-height:calc(100vh - 48px);border-radius:18px;box-shadow:0 24px 60px rgba(15,21,27,.28),0 2px 8px rgba(15,21,27,.12)}
+.drawer.narrow{width:min(560px,calc(100vw - 48px))}
+.drawer .dhd{cursor:move;user-select:none;border-radius:18px 18px 0 0;padding-top:14px}
+.drawer .dhd::before{content:"";position:absolute;left:50%;top:6px;width:36px;height:4px;border-radius:4px;background:var(--line);transform:translateX(-50%)}
+.drawer .dhd{position:relative}
+.drawer .dft{border-radius:0 0 18px 18px}
+.drawer.moving{transition:none;box-shadow:0 30px 80px rgba(15,21,27,.35)}
+@media (max-width:640px){.scrim{padding:0}.drawer,.drawer.narrow{width:100%;max-height:100%;height:100%;border-radius:0}.drawer .dhd{cursor:default;border-radius:0}.drawer .dhd::before{display:none}}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -1901,9 +1912,18 @@ let usT=0;function userSearch(){clearTimeout(usT);usT=setTimeout(async()=>{if(!U
 let tT=0;function toast(msg,cls){const el=$("#toast");el.innerHTML=`<div class="toast ${cls||""}" role="status">${esc(msg)}</div>`;clearTimeout(tT);tT=setTimeout(()=>el.innerHTML="",cls==="bad"?6000:3000);}
 
 /* ========== render principal ========== */
+/* janelas flutuantes: centradas e arrastáveis pelo cabeçalho */
+let _mpos={key:null,x:0,y:0},_mdrag=null;
+function posModal(){const dr=document.querySelector("#modal .drawer");if(!dr||!S.modal)return;const k=S.modal.t+"|"+(S.modal.id||"");if(_mpos.key!==k)_mpos={key:k,x:0,y:0};dr.style.transform=_mpos.x||_mpos.y?`translate(${_mpos.x}px,${_mpos.y}px)`:"";}
+document.addEventListener("pointerdown",e=>{const h=e.target.closest&&e.target.closest("#modal .dhd");if(!h||e.target.closest("button,a,input,select,textarea")||matchMedia("(max-width:640px)").matches)return;
+  const dr=h.closest(".drawer");const r=dr.getBoundingClientRect();_mdrag={sx:e.clientX,sy:e.clientY,x0:_mpos.x,y0:_mpos.y,r};h.setPointerCapture&&h.setPointerCapture(e.pointerId);dr.classList.add("moving");e.preventDefault();});
+document.addEventListener("pointermove",e=>{if(!_mdrag)return;const d=_mdrag,W=innerWidth,H=innerHeight;let dx=e.clientX-d.sx,dy=e.clientY-d.sy;
+  dx=Math.max(-d.r.left-d.r.width+120,Math.min(W-d.r.left-120,dx));dy=Math.max(-d.r.top,Math.min(H-d.r.top-60,dy));
+  _mpos.x=d.x0+dx;_mpos.y=d.y0+dy;const dr=document.querySelector("#modal .drawer");if(dr)dr.style.transform=`translate(${_mpos.x}px,${_mpos.y}px)`;});
+document.addEventListener("pointerup",()=>{if(!_mdrag)return;_mdrag=null;const dr=document.querySelector("#modal .drawer");if(dr)dr.classList.remove("moving");});
 function doRender(){buildMaps();const ae=document.activeElement;const id=ae&&ae.id;let s0=null,s1=null;try{s0=ae.selectionStart;s1=ae.selectionEnd;}catch(e){}
   const mb=document.querySelector(".mbody");const mst=mb?mb.scrollTop:0;
-  $("#app").innerHTML=page();$("#modal").innerHTML=S.boot==="ready"&&S.modal?modalHtml():"";
+  $("#app").innerHTML=page();$("#modal").innerHTML=S.boot==="ready"&&S.modal?modalHtml():"";posModal();
   const mb2=document.querySelector(".mbody");if(mb2)mb2.scrollTop=mst;
   if(id){const el=document.getElementById(id);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(s0!=null)el.setSelectionRange(s0,s1);}catch(e){}}}
   placePlan();}
