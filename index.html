@@ -1496,6 +1496,13 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
       `<button class="btn" data-act="close">Voltar</button>${m.tipo==="aprovar"?`<button class="btn" data-act="doDecisao" data-a="agendar">Aprovar e agendar</button>`:""}<button class="btn ${L[2]}" data-act="doDecisao">${L[1]}</button>`,true);}
   if(m.t==="agendar")return wrap(`<h2>${P.estado==="Agendado"?"Reagendar":"Agendar"} ${esc(P.numero)}</h2>`,agendarBody(P,m),`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="doAgendar">${P.estado==="Agendado"?"Guardar alterações":"Agendar transporte"}</button>`);
   if(m.t==="iniciar")return wrap(`<h2>Iniciar execução ${esc(P.numero)}</h2>`,`${fld("modal.f.inicio","Data e hora efetivas de início",{type:"datetime-local",req:true})}<p class="muted">Previsto: ${fmtDT(P.previstoInicio)}</p>`,`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="doIniciar">Marcar em execução</button>`,true);
+  if(m.t==="editValid"){const fe=P.estado==="Concluído";const a=fromInput(m.f.inicio),z=fe?fromInput(m.f.fim):null;const dr=a&&z?Date.parse(z)-Date.parse(a):null;const dp=P.previstoInicio?fimPrevisto(P)-Date.parse(P.previstoInicio):null;
+    return wrap(`<h2>Editar validação ${esc(P.numero)}</h2>`,`<p class="muted" style="margin:0">${esc(destTxt(P))} · ${esc(matDesc(P)||"")} · previsto ${fmtDT(P.previstoInicio)}${P.previstoFim?" → "+fmtDT(P.previstoFim):""}</p>
+     <div class="grid g2">${fld("modal.f.inicio","Data e hora reais de início",{type:"datetime-local",req:true})}${fe?fld("modal.f.fim","Data e hora reais de conclusão",{type:"datetime-local",req:true}):""}</div>
+     ${fe?`<div class="note"><b>Tempo de execução: ${dr!=null&&dr>=0?fmtDur(dr):"—"}</b>${dp?` · previsto ${fmtDur(dp)}${dr!=null&&dr>=0?` · desvio ${dr-dp>=0?"+":"−"}${fmtDur(Math.abs(dr-dp))}`:""}`:""}</div>${fld("modal.f.custoEfetivo","Custo efetivo (€)",{type:"number",step:"0.01",min:0})}`:""}
+     ${fld("modal.f.motivo","Motivo da correção",{type:"textarea",ph:"Opcional. Fica no histórico do pedido."})}
+     ${fe?`<div class="def">Se o serviço afinal não terminou, use “Anular conclusão”: o pedido volta a “Em execução” e a hora de conclusão é retirada.</div>`:""}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
+     `${fe?`<button class="btn bad" data-act="anularConclusao" style="margin-right:auto">Anular conclusão</button>`:""}<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="doEditValid">Guardar validação</button>`,true);}
   if(m.t==="concluir")return wrap(`<h2>Confirmar conclusão ${esc(P.numero)}</h2>`,`${!P.inicioEfetivo?fld("modal.f.inicio","Data e hora efetivas de início",{type:"datetime-local",req:true}):`<p class="muted" style="margin:0">Início efetivo: ${fmtDT(P.inicioEfetivo)}</p>`}${fld("modal.f.fim","Data e hora efetivas de conclusão",{type:"datetime-local",req:true})}
       ${(()=>{const a=P.inicioEfetivo||fromInput(m.f.inicio),b=fromInput(m.f.fim);const dr=a&&b?Date.parse(b)-Date.parse(a):null;const dp=P.previstoInicio?fimPrevisto(P)-Date.parse(P.previstoInicio):null;return `<div class="note"><b>Tempo de execução: ${dr!=null&&dr>=0?fmtDur(dr):"—"}</b>${dp?` · previsto ${fmtDur(dp)}${dr!=null&&dr>=0?` · desvio ${dr-dp>=0?"+":"−"}${fmtDur(Math.abs(dr-dp))}`:""}`:""}</div>`;})()}
       ${fld("modal.f.custoEfetivo","Custo efetivo (€)",{type:"number",step:"0.01",min:0,hint:"Opcional. Deixe vazio se ainda não for conhecido."})}${fld("modal.f.ocorrencia","Ocorrências, atrasos ou alterações",{type:"textarea"})}
@@ -1614,8 +1621,8 @@ function pedAcoes(P){const b=[];const L=can.log(),e=P.estado;
   if(L&&P.tipo==="maquina"&&["Aprovado","Por agendar","Agendado"].includes(e))b.push(`<button class="btn" data-act="toPlaneador" data-a="${P.id}">${P.planeador?"Reenviar":"Enviar"} ao planeador de rotas</button>`);
   if(L&&["Aprovado","Por agendar"].includes(e))b.push(`<button class="btn pri" data-act="agendar" data-a="${P.id}">Agendar</button>`);
   if(L&&e==="Agendado")b.push(`<button class="btn" data-act="agendar" data-a="${P.id}">Reagendar / recursos</button><button class="btn pri" data-act="iniciar" data-a="${P.id}">Iniciar execução</button>`);
-  if(L&&e==="Em execução")b.push(`<button class="btn" data-act="agendar" data-a="${P.id}">Recursos</button><button class="btn pri" data-act="concluir" data-a="${P.id}">Confirmar conclusão</button>`);
-  if(L&&e==="Concluído")b.push(`<button class="btn" data-act="custo" data-a="${P.id}">Atualizar custo efetivo</button>`);
+  if(L&&e==="Em execução")b.push(`<button class="btn" data-act="agendar" data-a="${P.id}">Recursos</button><button class="btn" data-act="editValid" data-a="${P.id}">Editar validação</button><button class="btn pri" data-act="concluir" data-a="${P.id}">Confirmar conclusão</button>`);
+  if(L&&e==="Concluído")b.push(`<button class="btn" data-act="custo" data-a="${P.id}">Atualizar custo efetivo</button><button class="btn pri" data-act="editValid" data-a="${P.id}">Editar validação</button>`);
   if(L&&!["Rascunho","Rejeitado","Cancelado"].includes(e))b.push(`<button class="btn" data-act="ocorr" data-a="${P.id}">Registar ocorrência</button>`);
   if(podeCancelar(P))b.unshift(`<button class="btn bad" data-act="cancelar" data-a="${P.id}">Cancelar pedido</button>`);
   return b.join("");}
@@ -1677,6 +1684,15 @@ const A={
   menu(){if(matchMedia("(max-width:900px)").matches){S.menu=!S.menu;}else{S.sideOff=!S.sideOff;try{localStorage.setItem("cpsa_side",S.sideOff?"off":"on");}catch(e){}}render();},
   plExp(id){S.plExp=S.plExp||{};S.plExp[id]=!S.plExp[id];render();},
   plExpAll(v){S.plExp={};if(v==="1"){const d=planoData();d.grupos.forEach(g=>g.cards.forEach(c=>S.plExp[c.v.id]=true));}render();},
+  editValid(id){const P=M.ped[id];S.modal={t:"editValid",id,f:{inicio:toInput(P.inicioEfetivo||P.previstoInicio),fim:toInput(P.conclusaoEfetiva||nowISO()),custoEfetivo:P.recurso?.custoEfetivo??"",motivo:""}};render();},
+  async doEditValid(){const m=S.modal,P=M.ped[m.id],f=m.f;const fe=P.estado==="Concluído";const ini=fromInput(f.inicio),fim=fe?fromInput(f.fim):null;
+    if(!ini||(fe&&!fim)){m.err="Indique as datas e horas reais.";return render();}if(fe&&fim<ini){m.err="A conclusão não pode ser anterior ao início.";return render();}
+    const mud=[];if(ini!==P.inicioEfetivo)mud.push(`início ${fmtDT(P.inicioEfetivo)} → ${fmtDT(ini)}`);if(fe&&fim!==P.conclusaoEfetiva)mud.push(`conclusão ${fmtDT(P.conclusaoEfetiva)} → ${fmtDT(fim)}`);
+    const ce=fe?numOr(f.custoEfetivo):P.recurso?.custoEfetivo??null;if(fe&&ce!==(P.recurso?.custoEfetivo??null))mud.push(`custo efetivo ${eur(P.recurso?.custoEfetivo)} → ${eur(ce)}`);
+    if(!mud.length&&!String(f.motivo||"").trim()){S.modal=null;return render();}
+    const patch={inicioEfetivo:ini,historico:hist(P,"Validação editada",mud.join("; ")+(String(f.motivo||"").trim()?` · Motivo: ${f.motivo.trim()}`:""))};if(fe){patch.conclusaoEfetiva=fim;patch.recurso={...(P.recurso||{}),custoEfetivo:ce};}
+    await savePed(P,patch,`Validação de ${P.numero} atualizada.`);S.modal=null;render();},
+  async anularConclusao(){const m=S.modal,P=M.ped[m.id];await savePed(P,{estado:"Em execução",conclusaoEfetiva:null,historico:hist(P,"Conclusão anulada",String(m.f.motivo||"").trim()||"")},`${P.numero} voltou a “Em execução”.`);S.modal=null;render();},
   logRem(id){const F=S.form;if(!F)return;F._logMan=true;F.logisticaIds=F.logisticaIds.filter(x=>x!==id);F.logisticaId=F.logisticaIds[0]||"";render();},
   vAdd(){const F=S.form;F.vExtra.push({categoriaId:F.categoriaId,equipamentoId:"",variante:"",qtd:"1",ini_d:F.periodoInicio_d||"",ini_h:F.periodoInicio_h||"",fim_d:F.periodoFim_d||"",fim_h:F.periodoFim_h||""});render();},
   vRem(i){S.form.vExtra.splice(+i,1);render();},
