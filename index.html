@@ -414,6 +414,18 @@ td.vcell .occ{margin-top:4px;max-width:170px}
 .drawer .dft{border-radius:0 0 18px 18px}
 .drawer.moving{transition:none;box-shadow:0 30px 80px rgba(15,21,27,.35)}
 @media (max-width:640px){.scrim{padding:0}.drawer,.drawer.narrow{width:100%;max-height:100%;height:100%;border-radius:0}.drawer .dhd{cursor:default;border-radius:0}.drawer .dhd::before{display:none}}
+
+/* listas com pesquisa */
+.cbx{position:relative;display:block;min-width:0;width:100%}
+.cbx-native{position:absolute!important;opacity:0;pointer-events:none;width:1px!important;height:1px!important;left:0;bottom:0;padding:0!important;border:0!important}
+input.cbx-in{width:100%;padding-right:30px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23778' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;text-overflow:ellipsis;cursor:pointer}
+input.cbx-in:focus{cursor:text}
+.cbx-pop{position:fixed;z-index:300;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh-h);overflow:auto;padding:4px;max-width:min(520px,calc(100vw - 16px));font-size:13.5px}
+.cbx-it{padding:7px 10px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cbx-it.sel{font-weight:700}
+.cbx-it.on{background:color-mix(in srgb,var(--accent) 16%,var(--panel))}
+.cbx-it mark{background:color-mix(in srgb,var(--accent) 35%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+.cbx-empty{padding:10px;color:var(--muted)}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -993,12 +1005,12 @@ function secLocais(F){const t=F.tipo,mq=t==="maquina";
   const L={viatura:[null,"Local de trabalho / apresentação",null],armazem:["Local de carga","Local de entrega","Entregar em"],fornecedor:["Morada de recolha no fornecedor","Local de entrega","Entregar em"],recolha:["Local de recolha","Destino da carga","Recolher em"],maquina:["Origem (onde está a máquina)","Destino","Entregar até"],cisterna:["Local de carga","Local de descarga","Data e hora de descarga"]}[t];
   const k=mq?kmEntre(formAn(F).orig,formAn(F).dest):null;
   return `<section class="form-sec"><header><span class="k">4</span><h3>Locais e datas</h3></header><div>
-   ${L[0]?fld("form.localCarga",L[0],{req:t!=="cisterna",hint:t==="cisterna"?"Ex.: Secil Maceira, Carbomin Turquel":"",rc:mq,list:mq?"dl_locais":null})+fld("form.coordCarga","Morada ou coordenadas",{ph:"Opcional"}):""}
-   ${fld("form.localDescarga",L[1],{req:true,rc:mq,list:mq?"dl_locais":null})}${fld("form.coordDescarga","Morada ou coordenadas",{ph:"Opcional"})}
+   ${L[0]?fld("form.localCarga",L[0],{req:t!=="cisterna",hint:t==="cisterna"?"Ex.: Secil Maceira, Carbomin Turquel":"",rc:mq,list:mq?"dl_locais":"dl_hist"})+fld("form.coordCarga","Morada ou coordenadas",{ph:"Opcional"}):""}
+   ${fld("form.localDescarga",L[1],{req:true,rc:mq,list:mq?"dl_locais":"dl_hist"})}${fld("form.coordDescarga","Morada ou coordenadas",{ph:"Opcional"})}
    ${mq?fld("form.maqDisp","Máquina disponível a partir de",{type:"datetime-local",hint:"Usada para calcular a hora prevista de entrega."}):""}
    ${L[2]?dtFlds("pretendidaEm",L[2].replace(/ e hora/i,""),true):""}
    ${mq?fld("form.kmManual","Distância (km)",{type:"number",min:0,rc:true,hint:k!=null?`Estimativa pelos Locais do planeador: ${k} km. Deixe vazio para usar esta.`:"Sem coordenadas para estes locais: indique os km ou registe os locais no planeador."}):""}
-   </div></section>${mq?`<datalist id="dl_locais">${PS.locais.map(l=>`<option value="${esc(l.nome)}">`).join("")}</datalist>`:""}`;}
+   </div></section>${mq?`<datalist id="dl_locais">${PS.locais.map(l=>`<option value="${esc(l.nome)}">`).join("")}</datalist>`:`<datalist id="dl_hist">${[...new Set(S.d.pedidos.flatMap(p=>[p.localCarga,p.localDescarga]).concat(S.d.obras.map(o=>o.nome)).map(x=>String(x||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt")).slice(0,800).map(x=>`<option value="${esc(x)}">`).join("")}</datalist>`}`;}
 function secObs(F){return `<section class="form-sec"><header><span class="k">5</span><h3>Instruções e anexos</h3></header><div>
   ${fld("form.instrucoes",F.tipo==="cisterna"?"Observações":"Instruções de carga e descarga",{type:"textarea",cls:"full",ph:F.tipo==="cisterna"?"Ex.: Viaturas 30t | Pausa 12:00-13:00 | Encomenda 1455":""})}${fld("form.restricoes","Restrições de acesso e condições especiais",{type:"textarea",cls:"full",ph:"Ex.: acesso por caminho de terra, limite de altura 4 m"})}
   <div class="fld full"><span>Fotografias, documentos ou anexos</span>${anexosHtml(F.anexos,true,"form")}</div>
@@ -1921,9 +1933,45 @@ document.addEventListener("pointermove",e=>{if(!_mdrag)return;const d=_mdrag,W=i
   dx=Math.max(-d.r.left-d.r.width+120,Math.min(W-d.r.left-120,dx));dy=Math.max(-d.r.top,Math.min(H-d.r.top-60,dy));
   _mpos.x=d.x0+dx;_mpos.y=d.y0+dy;const dr=document.querySelector("#modal .drawer");if(dr)dr.style.transform=`translate(${_mpos.x}px,${_mpos.y}px)`;});
 document.addEventListener("pointerup",()=>{if(!_mdrag)return;_mdrag=null;const dr=document.querySelector("#modal .drawer");if(dr)dr.classList.remove("moving");});
-function doRender(){buildMaps();const ae=document.activeElement;const id=ae&&ae.id;let s0=null,s1=null;try{s0=ae.selectionStart;s1=ae.selectionEnd;}catch(e){}
+/* ===== listas com pesquisa (autocomplete) em todos os campos de escolha ===== */
+const CBX_MIN=2;let _cbx=null,_cbxKeep=null;
+const cbxNorm=x=>String(x||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+function cbxText(sel){const o=sel.options[sel.selectedIndex];return o?o.text:"";}
+function cbxClose(){const p=document.getElementById("cbxPop");if(p)p.remove();if(_cbx){_cbx.inp.setAttribute("aria-expanded","false");}_cbx=null;}
+function cbxOpen(inp,q){const sel=inp._sel;if(!sel||sel.disabled)return;const ws=cbxNorm(q).split(/\s+/).filter(Boolean);
+  const items=[...sel.options].map((o,i)=>({i,v:o.value,t:o.text,n:cbxNorm(o.text)})).filter(x=>!ws.length||ws.every(w=>x.n.includes(w)));
+  let p=document.getElementById("cbxPop");if(!p){p=document.createElement("div");p.id="cbxPop";p.className="cbx-pop";p.setAttribute("role","listbox");document.body.appendChild(p);}
+  const r=inp.getBoundingClientRect();const below=innerHeight-r.bottom;const h=Math.min(300,Math.max(below-12,r.top-12));
+  p.style.left=Math.max(8,Math.min(r.left,innerWidth-Math.max(r.width,240)-8))+"px";p.style.minWidth=r.width+"px";p.style.maxHeight=h+"px";
+  if(below<180&&r.top>below){p.style.top="";p.style.bottom=(innerHeight-r.top+4)+"px";}else{p.style.bottom="";p.style.top=(r.bottom+4)+"px";}
+  const hl=t=>{let out=esc(t);ws.forEach(w=>{const n=cbxNorm(t),k=n.indexOf(w);if(k>=0&&w.length){out=esc(t.slice(0,k))+"<mark>"+esc(t.slice(k,k+w.length))+"</mark>"+esc(t.slice(k+w.length));}});return out;};
+  const cur=Math.max(0,items.findIndex(x=>x.v===sel.value&&!ws.length));
+  _cbx={inp,sel,items,idx:items.length?cur:-1};
+  p.innerHTML=items.length?items.map((x,k)=>`<div class="cbx-it${k===_cbx.idx?" on":""}${x.v===sel.value?" sel":""}" role="option" data-k="${k}">${hl(x.t)||'<span class="muted">—</span>'}</div>`).join(""):`<div class="cbx-empty">Sem resultados para “${esc(q)}”.</div>`;
+  inp.setAttribute("aria-expanded","true");const on=p.querySelector(".on");if(on)on.scrollIntoView({block:"nearest"});}
+function cbxPick(k){if(!_cbx)return;const x=_cbx.items[k];if(!x)return;const{sel,inp}=_cbx;cbxClose();inp.value=x.t;if(sel.value!==x.v){sel.value=x.v;sel.dispatchEvent(new Event("change",{bubbles:true}));}}
+function cbxMove(d){if(!_cbx||!_cbx.items.length)return;_cbx.idx=(_cbx.idx+d+_cbx.items.length)%_cbx.items.length;const p=document.getElementById("cbxPop");if(!p)return;p.querySelectorAll(".cbx-it").forEach((e,k)=>e.classList.toggle("on",k===_cbx.idx));const on=p.querySelector(".on");if(on)on.scrollIntoView({block:"nearest"});}
+function enhanceSelects(){document.querySelectorAll("select:not([data-cbx]):not([multiple])").forEach(sel=>{if(sel.options.length<CBX_MIN||sel.classList.contains("no-cbx"))return;sel.dataset.cbx="1";
+  const w=document.createElement("span");w.className="cbx";sel.parentNode.insertBefore(w,sel);w.appendChild(sel);sel.classList.add("cbx-native");sel.tabIndex=-1;sel.setAttribute("aria-hidden","true");
+  const inp=document.createElement("input");inp.type="text";inp.className="cbx-in "+(sel.className.replace("cbx-native","").trim());inp.autocomplete="off";inp.spellcheck=false;inp.setAttribute("role","combobox");inp.setAttribute("aria-autocomplete","list");inp.setAttribute("aria-expanded","false");
+  if(sel.id){inp.id=sel.id+"__q";const lb=sel.closest("label");if(lb&&lb.htmlFor===sel.id)lb.htmlFor=inp.id;}
+  if(sel.getAttribute("aria-label"))inp.setAttribute("aria-label",sel.getAttribute("aria-label"));
+  inp.value=cbxText(sel);inp.placeholder="Escreva para pesquisar…";inp.disabled=sel.disabled;inp._sel=sel;w.appendChild(inp);});
+  if(_cbxKeep){const inp=document.getElementById(_cbxKeep.id);if(inp&&inp._sel){inp.value=_cbxKeep.v;if(document.activeElement!==inp)inp.focus({preventScroll:true});try{inp.setSelectionRange(_cbxKeep.v.length,_cbxKeep.v.length);}catch(e){}if(_cbxKeep.open)cbxOpen(inp,_cbxKeep.q);}_cbxKeep=null;}}
+document.addEventListener("focusin",e=>{const t=e.target;if(t.classList&&t.classList.contains("cbx-in")&&!t._typing){setTimeout(()=>{try{t.select();}catch(x){}},0);}});
+document.addEventListener("mousedown",e=>{const it=e.target.closest&&e.target.closest("#cbxPop .cbx-it");if(it){e.preventDefault();cbxPick(+it.dataset.k);return;}if(e.target.closest&&e.target.closest("#cbxPop"))e.preventDefault();});
+document.addEventListener("click",e=>{const t=e.target;if(t.classList&&t.classList.contains("cbx-in")){if(_cbx&&_cbx.inp===t)return;cbxOpen(t,"");}},true);
+document.addEventListener("input",e=>{const t=e.target;if(t.classList&&t.classList.contains("cbx-in")){t._typing=true;cbxOpen(t,t.value);}},true);
+document.addEventListener("keydown",e=>{const t=e.target;if(!(t.classList&&t.classList.contains("cbx-in")))return;
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();if(!_cbx||_cbx.inp!==t)cbxOpen(t,"");else cbxMove(e.key==="ArrowDown"?1:-1);}
+  else if(e.key==="Enter"){if(_cbx&&_cbx.inp===t&&_cbx.idx>=0){e.preventDefault();e.stopPropagation();cbxPick(_cbx.idx);}}
+  else if(e.key==="Escape"){if(_cbx){e.preventDefault();e.stopPropagation();cbxClose();t.value=cbxText(t._sel);t.select();}}
+  else if(e.key==="Tab"){if(_cbx&&_cbx.inp===t&&t._typing&&_cbx.items.length&&_cbx.idx>=0)cbxPick(_cbx.idx);}},true);
+document.addEventListener("focusout",e=>{const t=e.target;if(!(t.classList&&t.classList.contains("cbx-in")))return;setTimeout(()=>{if(document.activeElement===t)return;if(_cbx&&_cbx.inp===t)cbxClose();t._typing=false;if(t._sel)t.value=cbxText(t._sel);},120);});
+window.addEventListener("resize",()=>cbxClose());document.addEventListener("scroll",e=>{if(_cbx&&!(e.target.closest&&e.target.closest("#cbxPop")))cbxClose();},true);
+function doRender(){buildMaps();const ae=document.activeElement;if(ae&&ae.classList&&ae.classList.contains("cbx-in")&&ae.id){_cbxKeep={id:ae.id,v:ae.value,q:ae.value,open:!!(_cbx&&_cbx.inp===ae)};}cbxClose();const id=ae&&ae.id;let s0=null,s1=null;try{s0=ae.selectionStart;s1=ae.selectionEnd;}catch(e){}
   const mb=document.querySelector(".mbody");const mst=mb?mb.scrollTop:0;
-  $("#app").innerHTML=page();$("#modal").innerHTML=S.boot==="ready"&&S.modal?modalHtml():"";posModal();
+  $("#app").innerHTML=page();$("#modal").innerHTML=S.boot==="ready"&&S.modal?modalHtml():"";posModal();enhanceSelects();
   const mb2=document.querySelector(".mbody");if(mb2)mb2.scrollTop=mst;
   if(id){const el=document.getElementById(id);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(s0!=null)el.setSelectionRange(s0,s1);}catch(e){}}}
   placePlan();}
