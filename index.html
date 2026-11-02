@@ -733,6 +733,17 @@ function pessoaLog(g){if(!g)return null;const u=g.utilizadorId&&M.user[g.utiliza
 function gAtivo(g){return g.ativo!==false&&!!pessoaLog(g);}
 const gSemCob=g=>!gEq(g).length&&!gEmp(g).length&&!gZo(g).length;
 let _gsDone=new Set();
+/* Correção (nov 2026): "Estrado" deixa de ser variante do Carro-grua e passa a ser uma viatura própria nos Transportes especiais */
+let _migEst=false;
+async function migrarEstrado(){if(_migEst||!db||realRole()!=="admin"||!["equipamentos","pedidos","gestores","cfg"].every(c=>S.loaded[c]))return;const cg=S.d.equipamentos.find(e=>e.id==="carro-grua");
+  if(!cg||!(cg.variantes||[]).some(v=>normNome(v)==="estrado"))return;_migEst=true;const tt=nowISO();
+  try{if(!S.d.equipamentos.some(e=>e.id==="estrado"))await db.doc("equipamentos/estrado").set({nome:"Estrado",categoriaId:"especiais",ordem:3,variantes:[],recolha:!!cg.recolha,ativo:true,criadoEm:tt,criadoPor:S.me.id});
+    await db.doc("equipamentos/carro-grua").update({variantes:(cg.variantes||[]).filter(v=>normNome(v)!=="estrado")});
+    const ps=S.d.equipamentos.find(e=>e.id==="porta-silos");if(ps&&(ps.ordem??0)<=3)await db.doc("equipamentos/porta-silos").update({ordem:4});
+    for(const p of S.d.pedidos.filter(p=>p.equipamentoId==="carro-grua"&&normNome(p.variante)==="estrado"))await db.doc("pedidos/"+p.id).update({equipamentoId:"estrado",variante:"",historico:hist(p,"Tipo de viatura corrigido","Carro-grua · Estrado → Estrado")});
+    for(const g of S.d.gestores.filter(g=>(g.equipamentos||[]).includes("carro-grua")&&!(g.equipamentos||[]).includes("estrado")))await db.doc("gestores/"+g.id).update({equipamentos:[...g.equipamentos,"estrado"]});
+    const sv=svcCfg();if(sv["carro-grua"]&&!sv.estrado){const d=(S.d.cfg||[]).find(c=>c.id==="servicos");await db.doc("cfg/servicos").set({...(d||{}),map:{...sv,estrado:sv["carro-grua"]}});}
+    toast("Tipos de viatura atualizados: “Estrado” passou a ser uma viatura dos Transportes especiais.");}catch(e){console.warn(e);_migEst=false;}}
 async function syncGestores(){if(!db||realRole()!=="admin"||!["utilizadores","convites","gestores"].every(c=>S.loaded[c]))return;
   const pess=[...S.d.utilizadores.filter(u=>u.ativo!==false&&u.perfil==="logistica").map(u=>({k:"u:"+u.id,uid:u.id,nome:nome(u.id)!=="Utilizador"?nome(u.id):(u.alcunha||""),email:u.email||""})),
     ...S.d.convites.filter(c=>c.ativo!==false&&!c.usadoPor&&c.perfil==="logistica").map(c=>({k:"c:"+c.id,cid:c.id,nome:c.nome,email:c.email||""}))];
@@ -2226,7 +2237,7 @@ async function boot(){route();if(!window.claude||!window.claude.use){S.boot="noh
   const me=U?await U.me():{id:null,isOwner:false,canEdit:false,avatarUrl:""};const cw=U?await U.can("data.write"):null;
   S.me={id:me.id,isOwner:!!me.isOwner,canEdit:!!me.canEdit,canWrite:cw,avatar:me.avatarUrl||"",email:me.email||null,name:me.name||""};S.boot="ready";
   COLS.forEach(c=>{let q=db.collection(c);if(c==="notificacoes")q=q.orderBy("em","desc").limit(300);if(c==="pedidos")q=q.limit(1000);
-    q.onSnapshot(s=>{S.d[c]=s.docs.map(d=>({id:d.id,...d.data()}));S.loaded[c]=true;render();if(c==="convites"||c==="acessos"||c==="utilizadores")setTimeout(syncConvites,300);if(c==="convites"||c==="utilizadores"||c==="gestores")setTimeout(syncGestores,500);},e=>{console.warn(c,e);S.loaded[c]=true;render();});});
+    q.onSnapshot(s=>{S.d[c]=s.docs.map(d=>({id:d.id,...d.data()}));S.loaded[c]=true;render();if(c==="convites"||c==="acessos"||c==="utilizadores")setTimeout(syncConvites,300);if(c==="convites"||c==="utilizadores"||c==="gestores")setTimeout(syncGestores,500);if(["equipamentos","pedidos","gestores","cfg"].includes(c))setTimeout(migrarEstrado,700);},e=>{console.warn(c,e);S.loaded[c]=true;render();});});
   claude.use("downloads").then(d=>DL=d);claude.use("assets").then(a=>{AS=a;render();});render();}
 window.CPSA_READY.then(ok=>{if(!ok)return;if(/access_token|type=|error_description/.test(location.hash))history.replaceState(null,"",location.pathname+location.search);boot();});
 </script>
