@@ -987,8 +987,8 @@ function vNovo(){if(!can.pedido())return denied();if(!S.form)S.form=novoForm();c
   const tipos=`<section class="form-sec"><header><span class="k">1</span><h3>Tipo de pedido</h3></header><div class="tipos">${TIPOS.filter(t=>t.k!=="cisterna"||can.log()||F.tipo==="cisterna").map((t,i)=>`<button class="tipo ${F.tipo===t.k?"on":""}" data-act="setTipo" data-a="${t.k}" aria-pressed="${F.tipo===t.k}"><span class="k">${i+1}</span><b>${esc(t.n)}</b><small>${esc(t.d)}</small></button>`).join("")}</div></section>`;
   if(!F.tipo)return head+tipos;
   const urg=F.tipo==="armazem"||F.tipo==="fornecedor";
-  const ident=`<section class="form-sec"><header><span class="k">2</span><h3>Obra e identificação</h3></header><div>
-   ${fld("form.obraId",F.tipo==="cisterna"?"Obra (se aplicável)":"Obra",{type:"select",req:F.tipo!=="cisterna",opts:[["","Selecione a obra"]].concat(obras.map(o=>[o.id,`${o.codigo} · ${o.nome}${o.ativa===false?" (inativa)":""}`]))})}
+  const ident=`<section class="form-sec"><header><span class="k">2</span><h3>${F.tipo==="cisterna"?"Identificação":"Obra e identificação"}</h3></header><div>
+   ${F.tipo==="cisterna"?"":fld("form.obraId",F.tipo==="cisterna"?"Obra (se aplicável)":"Obra",{type:"select",req:F.tipo!=="cisterna",opts:[["","Selecione a obra"]].concat(obras.map(o=>[o.id,`${o.codigo} · ${o.nome}${o.ativa===false?" (inativa)":""}`]))})}
    <div class="fld"><span>Gestores de logística responsáveis</span><div class="chips-in">${F.logisticaIds.map(id=>`<span class="chip c-info">${esc(nome(id))}<button type="button" class="btn sm ghost" style="padding:0 4px" data-act="logRem" data-a="${esc(id)}" aria-label="Remover ${esc(nome(id))}">×</button></span>`).join("")||'<span class="muted">A definir pela Logística</span>'}</div>
      ${(()=>{const o=optLogistica("").filter(x=>x[0]&&!F.logisticaIds.includes(x[0]));return o.length?`<select data-addlog="1" aria-label="Adicionar gestor de logística"><option value="">+ Adicionar gestor…</option>${o.map(x=>`<option value="${esc(x[0])}">${esc(x[1])}</option>`).join("")}</select>`:"";})()}
      <small>${F.logisticaIds.length&&!F._logMan&&F._autoLog?"Atribuído automaticamente pelo tipo de viatura. Pode acrescentar ou retirar.":(!F._autoLog&&!F.logisticaIds.length?"Sem gestor definido para este tipo de viatura (Configurações › Serviços por tipo de viatura).":"")}</small></div>
@@ -1104,7 +1104,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
   let maquinas=null,analise=null;
   if(t==="maquina"){maquinas=G.maquinas.filter(n=>maqBy(n)).map(n=>{const e=maqBy(n),s=specOf(e);return{num:n,label:maqLabel(e),classe:e.classe,peso:s.peso,c:s.c,l:s.l,a:s.a,est:!!s.est};});
     const A=analiseMaq(formAn(G));if(A&&!A.sem){const b=A.rank.find(r=>r.fits&&!r.excluded);analise={nivel:A.cl.level,pesoKg:A.L.peso,viagens:A.vg?A.vg.n:null,conjunto:b?b.pm.id:null,pilotos:A.pil.n,km:A.km,duracaoMin:A.pv?A.pv.fim:null,entregaPrevista:A.pv?A.pv.entrega:null,calculadoEm:nowISO()};}}
-  return {tipo:t,obraId:G.obraId,logisticaId:G.logisticaId||gestorAutoId({tipo:t,equipamentoId:eqId,categoriaId:t==="cisterna"?"cisternas":G.categoriaId})||null,prioridade:(t==="armazem"||t==="fornecedor")?(G.urgente?"urgente":"normal"):(G.prioridade||"normal"),
+  return {tipo:t,obraId:t==="cisterna"?null:G.obraId,logisticaId:G.logisticaId||gestorAutoId({tipo:t,equipamentoId:eqId,categoriaId:t==="cisterna"?"cisternas":G.categoriaId})||null,prioridade:(t==="armazem"||t==="fornecedor")?(G.urgente?"urgente":"normal"):(G.prioridade||"normal"),
     categoriaId:t==="cisterna"?"cisternas":eqId?(M.eq[eqId]?.categoriaId||G.categoriaId||null):(G.categoriaId||null),equipamentoId:eqId,variante:t==="maquina"||t==="recolha"?"":(G.variante||""),
     periodoInicio:t==="viatura"?pi:null,periodoFim:t==="viatura"?pf:null,box:t==="armazem"?String(G.box||"").trim():"",
     fornecedorId:t==="fornecedor"&&forn?forn.id:null,fornecedorNome:t==="fornecedor"?fornNome:"",
