@@ -438,6 +438,9 @@ input.cbx-in:focus{cursor:text}
 @media (min-width:1000px){.form-sec>div>.dtpair,.xline .xg>.dtpair{grid-column:span 2}}
 
 .cbx-it.cbx-new{border-top:1px solid var(--line);margin-top:4px;color:var(--focus);font-weight:700}
+
+body.is-dragging [data-dropback]{outline:2px dashed color-mix(in srgb,var(--info) 55%,transparent);outline-offset:-2px}
+[data-dropback].drop-over{outline:2px solid var(--info)!important;background:color-mix(in srgb,var(--info) 8%,var(--panel))!important}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -838,7 +841,8 @@ function chipE(e){return `<span class="chip ${EST_CLS[e]||"c-idle"}">${esc(e)}</
 function chipP(p){return `<span class="chip ${PRIO_CLS[p]||"c-idle"}">${esc((PRIOS.find(x=>x[0]===p)||[0,p||"—"])[1])}</span>`;}
 function chipO(p){const o=origem(p);return o==="externa"?`<span class="chip c-ext">Externo</span>`:o==="propria"?`<span class="chip c-own">Própria</span>`:`<span class="muted">—</span>`;}
 function chipAtr(p){return emAtraso(p)?` <span class="chip c-bad">Em atraso</span>`:"";}
-const pn=p=>`<span class="pn">${esc(p.numero||"novo")}</span>`;
+const numT=p=>(p.numero||"novo")+(p.cargaTot>1?` · ${p.cargaIdx}/${p.cargaTot}`:"");
+const pn=p=>`<span class="pn">${esc(numT(p))}</span>`;
 
 function tbl(id,cols,rows,o={}){const st=S.sort[id]||{k:o.k||cols[0].k,d:o.d||"asc"};const col=cols.find(c=>c.k===st.k)||cols[0];const sv=col.s||(r=>r[col.k]);
   rows=[...rows].sort((a,b)=>{let x=sv(a),y=sv(b);if(x==null||x==="")return 1;if(y==null||y==="")return -1;if(typeof x==="string")return x.localeCompare(String(y),"pt",{numeric:true})*(st.d==="asc"?1:-1);return (x>y?1:x<y?-1:0)*(st.d==="asc"?1:-1);});
@@ -1171,9 +1175,9 @@ function vAgenda(){const f=S.f.ag;const ps=agFilt(scope());const plan=ps.filter(
      return fld("f.ag.gestor","Gestor responsável",{type:"select",opts:optGestores()})+fld("f.ag.eq","Tipo de viatura",{type:"select",opts:optTipoViatura(eqO)})+fld("f.ag.empresa","Empresa",{type:"select",opts:[["","Todas"]].concat(emO)})+fld("f.ag.zona","Zona operacional",{type:"select",opts:[["","Todas"]].concat(zO.map(z=>[z.id,z.nome]))});})()}
    ${fld("f.ag.obra","Obra",{type:"select",opts:optObras("Todas",true)})}${fld("f.ag.tipo","Tipo de pedido",{type:"select",opts:optTipos()})}${fld("f.ag.viatura","Viatura",{type:"select",opts:opt0("Todas").concat(unidadesPlano().map(v=>[v.id,`${v.matricula||v.ident}${v.virtual?" · "+v.pm.id:""} · ${vTag(v)}`]))})}${fld("f.ag.origem","Origem",{type:"select",opts:optOrig})}
    ${f.vista==="plano"?fld("f.ag.soCargas","Só viaturas com cargas",{type:"check"}):""}<button class="btn ghost" data-act="clrf" data-a="ag">Limpar</button></div>
-  ${(()=>{const side=can.log()&&!S.agSideOff;return `<div class="ag-layout${side?"":" no-side"}">${side?`<aside class="ag-side" aria-label="Pedidos por agendar"><div class="ph"><h3>Por agendar <span class="muted">(${porAg.length})</span></h3><button class="btn sm ghost" data-act="agSide" title="Ocultar painel" aria-label="Ocultar painel">◀</button></div>
+  ${(()=>{const side=can.log()&&!S.agSideOff;return `<div class="ag-layout${side?"":" no-side"}">${side?`<aside class="ag-side" data-dropback="1" aria-label="Pedidos por agendar"><div class="ph"><h3>Por agendar <span class="muted">(${porAg.length})</span></h3><button class="btn sm ghost" data-act="agSide" title="Ocultar painel" aria-label="Ocultar painel">◀</button></div>
    ${porAg.length?`<div class="ag-list">${porAg.map(p=>`<div class="ag-it" draggable="true" data-drag="${p.id}" title="Arraste para uma viatura do plano para agendar"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipAtr(p)}</div><b>${esc(destTxt(p))}</b><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")}</span><small>Pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</small><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido à espera de agendamento.</div>`}</aside>`:""}<div class="ag-main">`;})()}
-  <div class="row">${can.log()&&S.agSideOff?`<button class="btn" data-act="agSide" title="Mostrar pedidos por agendar">Por agendar (${porAg.length}) ▸</button>`:""}<button class="btn" data-act="agNav" data-a="-1" aria-label="Anterior">◀</button><button class="btn" data-act="agNav" data-a="0">Hoje</button><button class="btn" data-act="agNav" data-a="1" aria-label="Seguinte">▶</button>${fld("f.ag.data","Ir para",{type:"date"})}${title?`<h2 style="margin-left:8px">${esc(title)}</h2>`:""}
+  <div class="row">${can.log()&&S.agSideOff?`<button class="btn" data-act="agSide" data-dropback="1" title="Mostrar pedidos por agendar">Por agendar (${porAg.length}) ▸</button>`:""}<button class="btn" data-act="agNav" data-a="-1" aria-label="Anterior">◀</button><button class="btn" data-act="agNav" data-a="0">Hoje</button><button class="btn" data-act="agNav" data-a="1" aria-label="Seguinte">▶</button>${fld("f.ag.data","Ir para",{type:"date"})}${title?`<h2 style="margin-left:8px">${esc(title)}</h2>`:""}
    <span class="legend" style="margin-left:auto"><span><i style="background:var(--own)"></i>Frota própria</span><span><i style="background:var(--ext)"></i>Externo</span><span><i style="background:var(--idle)"></i>Sem recurso</span></span></div>
   ${body}
   <div class="grid">
@@ -1247,7 +1251,7 @@ function planoData(){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
   return{dia,grupos,ext:f.origem==="propria"?[]:ext,porAtribuir:f.origem?[]:[...new Map(porAtribuir.map(p=>[p.id,p])).values()],cand,n:doDia.length};}
 function itemTxt(p,dia){const h=p.previstoInicio&&dayKey(p.previstoInicio)===dia?fmtT(p.previstoInicio):(p.previstoInicio?"cont.":"—");const o=M.obra[p.obraId];return{h,t:`${p.numero} · ${o?o.codigo:""} · ${matDesc(p)}${p.localDescarga?" → "+p.localDescarga:""}`};}
 function planoItem(p,dia){const x=itemTxt(p,dia),o=M.obra[p.obraId];
-  return `<li${can.log()&&!FINAIS.includes(p.estado)?` draggable="true" data-drag="${p.id}"`:""}><button class="pc-i ${p.prioridade==="urgente"?"urg":""}" data-act="ped" data-a="${p.id}"><span class="t num">${esc(x.h)}</span><span class="d"><b>${esc(p.numero)}</b> ${esc(o?o.codigo+" · "+o.nome:destTxt(p))}<br><span class="x">${esc(matDesc(p)||"—")}${p.localDescarga?" → "+esc(p.localDescarga):""}</span></span>${p.estado!=="Agendado"?chipE(p.estado):chipAtr(p)}</button></li>`;}
+  return `<li${can.log()&&!FINAIS.includes(p.estado)?` draggable="true" data-drag="${p.id}"`:""}><button class="pc-i ${p.prioridade==="urgente"?"urg":""}" data-act="ped" data-a="${p.id}"><span class="t num">${esc(x.h)}</span><span class="d"><b>${esc(numT(p))}</b> ${esc(o?o.codigo+" · "+o.nome:destTxt(p))}<br><span class="x">${esc(matDesc(p)||"—")}${p.localDescarga?" → "+esc(p.localDescarga):""}</span></span>${p.estado!=="Agendado"?chipE(p.estado):chipAtr(p)}</button></li>`;}
 function planoCard(v,peds,d,o={}){const lines=Math.max(5,peds.length+1);const fill=lines-peds.length;
   const sel=can.log()&&!o.sem&&d.cand.length?`<select class="pc-add" data-assign="${esc(v.id)}" aria-label="Atribuir pedido a ${esc(v.ident)}"><option value="">+ Atribuir pedido…</option>${d.cand.map(p=>`<option value="${p.id}">${esc(p.numero)} · ${esc(TIPO_SHORT[p.tipo]||"")} · ${esc(M.obra[p.obraId]?.codigo||"")} · ${fmtDT(p.periodoInicio||p.pretendidaEm)}</option>`).join("")}</select>`:"";
   const mot=v.virtual?v.pm.mot:v.motorista;
@@ -1269,7 +1273,7 @@ function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return 
     const vi=v?`<button class="pl-v" data-act="plExp" data-a="${esc(v.id)}" aria-expanded="${!!aberto}" title="Ver tipo, reboque e motorista"><span class="chev">${aberto?"▾":"▸"}</span><span class="plate">${esc(v.matricula||v.ident||"")}</span></button>${occBar(ocupacao(v.id,d.dia),true)}`:(lab?`<span class="muted">${esc(lab)}</span>`:"");
     const det=aberto?`<tr class="det"><td colspan="${NC}"><span><small>Tipo</small> ${esc(vTag(v)||"—")}</span><span><small>Reboque</small> ${esc(vReboques(v)||"—")}</span><span><small>Motorista</small> ${esc((v.virtual?v.pm.mot:v.motorista)||"—")}</span>${v.virtual?`<span><small>Conjunto</small> ${esc(v.pm.id)}</span>`:""}</td></tr>`:"";
     if(!peds.length)return `<tr class="vazio" ${v&&can.log()?`data-drop="${esc(v.id)}"`:""}><td>${vi}</td><td colspan="${NC-1}" class="muted">Sem cargas</td></tr>${det}`;
-    return peds.map((p,i)=>{const x=itemTxt(p,d.dia);return `<tr class="click" data-act="ped" data-a="${p.id}">${i===0?`<td rowspan="${n}" class="vcell" ${v&&can.log()?`data-drop="${esc(v.id)}"`:""}>${vi}</td>`:""}<td class="num">${esc(x.h)}</td><td><span class="pn">${esc(p.numero)}</span></td><td>${esc(destTxt(p))}</td><td>${esc(matDesc(p))}</td><td>${esc(p.localDescarga||"—")}</td><td>${chipE(p.estado)}</td></tr>`;}).join("")+det;};
+    return peds.map((p,i)=>{const x=itemTxt(p,d.dia);return `<tr class="click" data-act="ped" data-a="${p.id}">${i===0?`<td rowspan="${n}" class="vcell" ${v&&can.log()?`data-drop="${esc(v.id)}"`:""}>${vi}</td>`:""}<td class="num">${esc(x.h)}</td><td><span class="pn">${esc(numT(p))}</span></td><td>${esc(destTxt(p))}</td><td>${esc(matDesc(p))}</td><td>${esc(p.localDescarga||"—")}</td><td>${chipE(p.estado)}</td></tr>`;}).join("")+det;};
   const sec=(t,n,body)=>`<tr class="grp"><td colspan="${NC}">${esc(t)} <span class="muted">(${n})</span></td></tr>${body}`;
   let b="";if(d.porAtribuir.length)b+=sec("Por atribuir",d.porAtribuir.length,linhas(null,d.porAtribuir,""));
   if(d.ext.length)b+=sec("Veículos externos",d.ext.length,d.ext.map(p=>linhas(null,[p],M.tr[p.recurso?.transportadoraId]?.nome||"Externo")).join(""));
@@ -1653,6 +1657,9 @@ function agendarBody(P,m){const F=m.f;const eqSel=F.equipamentoId||"";
   const mots=[...new Set(viaturasAll().map(v=>v.motorista).filter(Boolean))];
   return `<p class="muted" style="margin:0">${esc(destTxt(P))} · ${chipT(P)} ${esc(matDesc(P)||"—")} · ${P.tipo==="maquina"?"entregar até":"pretendido"} ${fmtPed(P.pretendidaEm,P.pretendidaSemHora)}</p>
   ${P.tipo==="maquina"?`<section class="form-sec"><header><h3>Máquinas e conjuntos</h3></header><div style="display:block">${analiseHtml(A,{usar:true})}<div class="row" style="margin-top:8px"><button class="btn" data-act="toPlaneador" data-a="${P.id}">${P.planeador?"Reenviar":"Enviar"} ao planeador de rotas</button><button class="btn ghost" data-act="abrirPlan">Abrir o planeador</button></div></div></section>`:""}
+  ${(()=>{const n=numOr(P.nCargas)||1;if(n<2||P.cargaTot||!["Aprovado","Por agendar"].includes(P.estado))return "";const k=Math.min(n,Math.max(1,numOr(F.nAtribuir)||n));const ini=fromInput(F.inicio),fim=fromInput(F.fim);const step=ini&&fim&&fim>ini?(Date.parse(fim)-Date.parse(ini))/k:(numOr(F.durCarga)||CFG().duracaoPadraoH)*3600000;
+    return `<section class="form-sec"><header><h3>Cargas (${n})</h3></header><div>${fld("modal.f.nAtribuir","Cargas a atribuir a esta viatura",{type:"select",opts:Array.from({length:n},(_,i)=>[String(n-i),n-i===n?`Todas as ${n} cargas`:`${n-i} de ${n} carga(s)`])})}${fld("modal.f.durCarga","Duração de cada carga (h)",{type:"number",min:0.25,step:"any",dis:!!(ini&&fim),hint:ini&&fim?"Com conclusão prevista, o período é dividido pelas cargas.":"Usada para encadear as cargas a partir do início."})}
+     <div class="full"><small>Cada carga passa a ser uma linha (${esc(P.numero)} · 1/${n} … ${n}/${n}).${k<n?` Ficam ${n-k} carga(s) por agendar, que pode atribuir a outra viatura.`:""}</small>${ini?`<div class="mono" style="font-size:12px;margin-top:4px">${Array.from({length:k},(_,i)=>`Carga ${i+1}: ${fmtT(new Date(Date.parse(ini)+i*step).toISOString())}–${fmtT(new Date(Date.parse(ini)+(i+1)*step).toISOString())}`).join(" · ")}</div>`:""}</div></div></section>`;})()}
   <section class="form-sec"><header><h3>Data e hora de execução</h3></header><div>${fld("modal.f.inicio","Início previsto",{type:"datetime-local",req:true})}${fld("modal.f.fim","Conclusão prevista",{type:"datetime-local",hint:`Sem valor, os conflitos usam ${CFG().duracaoPadraoH} h.`})}${fld("modal.f.prioridade","Prioridade",{type:"select",opts:PRIOS})}</div></section>
   <section class="form-sec"><header><h3>Recursos</h3></header><div>${fld("modal.f.equipamentoId","Equipamento a utilizar",{type:"select",opts:[["","—"]].concat(eqs("",true).map(e=>[e.id,`${M.cat[e.categoriaId]?.nome||""} · ${e.nome}`])),hint:P.variante?`Pedido: ${P.variante}`:""})}
    ${fld("modal.f.origem","Origem do transporte",{type:"select",req:true,opts:[["","Selecione"],["propria","Frota própria"],["externa","Veículo externo"]]})}
@@ -1694,6 +1701,9 @@ const A={
   plExpAll(v){S.plExp={};if(v==="1"){const d=planoData();d.grupos.forEach(g=>g.cards.forEach(c=>S.plExp[c.v.id]=true));}render();},
   novaObraRapida(q){if(!can.obra()){toast("O seu perfil não pode criar obras.","bad");return;}A.obra("");const f=S.modal.f;q=String(q||"").trim();const m=q.match(/^(\d[\w./-]*)\s*(?:[·\-–]\s*)?(.*)$/);if(m){f.codigo=m[1];f.nome=m[2]||"";}else f.nome=q;S.modal.ret="form";render();
     setTimeout(()=>{const el=document.querySelector(`#modal [data-b="modal.f.${f.codigo?"nome":"codigo"}"]`);if(el)el.focus();},60);},
+  async desagendar(pid){const P=M.ped[pid];if(!P||!can.log())return;if(["Aprovado","Por agendar"].includes(P.estado))return;
+    if(P.estado!=="Agendado"){toast(`${numT(P)} está “${P.estado}” e não pode voltar a “Por agendar”.`,"bad");return;}
+    await savePed(P,{estado:"Por agendar",previstoInicio:null,previstoFim:null,agendadoEm:null,recurso:{custoEfetivo:P.recurso?.custoEfetivo??null},historico:hist(P,"Desagendado",`Retirado de ${recursoTxt(P)} (${fmtDT(P.previstoInicio)})`)},`${numT(P)} voltou a “Por agendar”.`);render();},
   editValid(id){const P=M.ped[id];S.modal={t:"editValid",id,f:{inicio:toInput(P.inicioEfetivo||P.previstoInicio),fim:toInput(P.conclusaoEfetiva||nowISO()),custoEfetivo:P.recurso?.custoEfetivo??"",motivo:""}};render();},
   async doEditValid(){const m=S.modal,P=M.ped[m.id],f=m.f;const fe=P.estado==="Concluído";const ini=fromInput(f.inicio),fim=fe?fromInput(f.fim):null;
     if(!ini||(fe&&!fim)){m.err="Indique as datas e horas reais.";return render();}if(fe&&fim<ini){m.err="A conclusão não pode ser anterior ao início.";return render();}
@@ -1770,6 +1780,19 @@ const A={
     if(P.recurso?.origem&&recursoTxt(P)!==recursoTxt({recurso}))mud.push(`recurso ${recursoTxt(P)} → ${recursoTxt({recurso})}`);if(f.prioridade!==P.prioridade)mud.push(`prioridade ${P.prioridade} → ${f.prioridade}`);
     if((f.equipamentoId||null)!==(P.equipamentoId||null))mud.push(`equipamento ${eqName(P.equipamentoId)} → ${eqName(f.equipamentoId)}`);
     const novo=["Aprovado","Por agendar"].includes(P.estado);
+    const nC=numOr(P.nCargas)||1;
+    if(novo&&nC>1&&!P.cargaTot){const k=Math.min(nC,Math.max(1,numOr(f.nAtribuir)||nC));const t0=Date.parse(ini);const step=fim?(Date.parse(fim)-t0)/k:(numOr(f.durCarga)||CFG().duracaoPadraoH)*3600000;
+      const pesoC=P.carga&&P.carga.peso!=null?Math.round(P.carga.peso/nC*100)/100:null;const tt=nowISO();
+      const base={...P};delete base.id;const sib=[];
+      for(let i=2;i<=nC;i++){const ref=db.collection("pedidos").doc();const ag=i<=k;const q={...base,nCargas:1,cargaIdx:i,cargaTot:nC,cargaGrupo:P.id,carga:P.carga?{...P.carga,peso:pesoC}:P.carga,recurso:ag?recurso:{},
+          historico:[...(P.historico||[]),{em:tt,por:S.me.id,acao:"Carga separada",detalhe:`Carga ${i} de ${nC} do pedido ${P.numero}`}]};
+        if(ag){Object.assign(q,{estado:"Agendado",agendadoEm:tt,previstoInicio:new Date(t0+(i-1)*step).toISOString(),previstoFim:new Date(t0+i*step).toISOString(),prioridade:f.prioridade,equipamentoId:f.equipamentoId||null,logisticaId:P.logisticaId||gestorAutoId(P)||S.me.id});q.historico.push({em:tt,por:S.me.id,acao:"Agendado",detalhe:`${fmtDT(q.previstoInicio)} · ${recursoTxt({recurso})}`});}
+        else{q.previstoInicio=null;q.previstoFim=null;}
+        sib.push(ref.set(q));}
+      try{await Promise.all(sib);}catch(e){toast(errMsg(e),"bad");return;}
+      const patch={nCargas:1,cargaIdx:1,cargaTot:nC,cargaGrupo:P.id,carga:P.carga?{...P.carga,peso:pesoC}:P.carga,previstoInicio:ini,previstoFim:new Date(t0+step).toISOString(),prioridade:f.prioridade,recurso,equipamentoId:f.equipamentoId||null,categoriaId:f.equipamentoId?(M.eq[f.equipamentoId]?.categoriaId||null):(P.categoriaId||null),estado:"Agendado",agendadoEm:tt,logisticaId:P.logisticaId||gestorAutoId(P)||S.me.id,
+        historico:hist(P,"Agendado",`Pedido dividido em ${nC} cargas · ${k} atribuída(s) a ${recursoTxt({recurso})} a partir de ${fmtDT(ini)}`)};
+      await savePed(P,patch,`${P.numero}: ${k} de ${nC} cargas agendadas${k<nC?`; ${nC-k} ficam por agendar`:""}.`);notify("agendado",{...P,...patch},`${P.numero} agendado (${k}/${nC} cargas) para ${fmtDT(ini)}`,[`u:${P.criadoPor}`]);S.modal=null;render();return;}
     const patch={previstoInicio:ini,previstoFim:fim,prioridade:f.prioridade,recurso,equipamentoId:f.equipamentoId||null,categoriaId:f.equipamentoId?(M.eq[f.equipamentoId]?.categoriaId||null):(P.categoriaId||null),estado:novo?"Agendado":P.estado,logisticaId:P.logisticaId||gestorAutoId(P)||S.me.id,
       historico:hist(P,novo?"Agendado":"Planeamento alterado",novo?`${fmtDT(ini)} · ${recursoTxt({recurso})}`:mud.join("; ")||"Sem alterações de data")};
     if(novo)patch.agendadoEm=nowISO();
@@ -1983,9 +2006,9 @@ document.addEventListener("input",e=>{const t=e.target;if(!t.dataset||!t.dataset
 let _dragPid=null;
 document.addEventListener("dragstart",e=>{const t=e.target.closest&&e.target.closest("[data-drag]");if(!t)return;_dragPid=t.dataset.drag;try{e.dataTransfer.setData("text/plain",_dragPid);e.dataTransfer.effectAllowed="move";}catch(x){}t.classList.add("dragging");document.body.classList.add("is-dragging");});
 document.addEventListener("dragend",e=>{document.querySelectorAll(".dragging,.drop-over").forEach(x=>x.classList.remove("dragging","drop-over"));document.body.classList.remove("is-dragging");_dragPid=null;});
-document.addEventListener("dragover",e=>{const t=e.target.closest&&e.target.closest("[data-drop]");if(!t||!_dragPid)return;e.preventDefault();try{e.dataTransfer.dropEffect="move";}catch(x){}document.querySelectorAll(".drop-over").forEach(x=>{if(x!==t)x.classList.remove("drop-over");});t.classList.add("drop-over");});
-document.addEventListener("dragleave",e=>{const t=e.target.closest&&e.target.closest("[data-drop]");if(t&&!t.contains(e.relatedTarget))t.classList.remove("drop-over");});
-document.addEventListener("drop",e=>{const t=e.target.closest&&e.target.closest("[data-drop]");if(!t)return;e.preventDefault();let pid=_dragPid;try{pid=e.dataTransfer.getData("text/plain")||pid;}catch(x){}t.classList.remove("drop-over");document.body.classList.remove("is-dragging");_dragPid=null;if(pid)A.assignTo(pid,t.dataset.drop);});
+document.addEventListener("dragover",e=>{const t=e.target.closest&&e.target.closest("[data-drop],[data-dropback]");if(!t||!_dragPid)return;e.preventDefault();try{e.dataTransfer.dropEffect="move";}catch(x){}document.querySelectorAll(".drop-over").forEach(x=>{if(x!==t)x.classList.remove("drop-over");});t.classList.add("drop-over");});
+document.addEventListener("dragleave",e=>{const t=e.target.closest&&e.target.closest("[data-drop],[data-dropback]");if(t&&!t.contains(e.relatedTarget))t.classList.remove("drop-over");});
+document.addEventListener("drop",e=>{const t=e.target.closest&&e.target.closest("[data-drop],[data-dropback]");if(!t)return;e.preventDefault();let pid=_dragPid;try{pid=e.dataTransfer.getData("text/plain")||pid;}catch(x){}t.classList.remove("drop-over");document.body.classList.remove("is-dragging");_dragPid=null;if(pid){if(t.dataset.dropback)A.desagendar(pid);else A.assignTo(pid,t.dataset.drop);}});
 document.addEventListener("focusout",e=>{const t=e.target;if(t&&t._pend){t._pend=false;setTimeout(render,180);}});
 document.addEventListener("change",async e=>{const t=e.target;if(t.dataset&&t.dataset.b){setPath(t.dataset.b,t.type==="checkbox"?t.checked:t.value);
     if(["date","time","datetime-local"].includes(t.type)){if(t.dataset.b.startsWith("form."))return;if(document.activeElement===t){t._pend=true;return;}}
