@@ -441,6 +441,10 @@ input.cbx-in:focus{cursor:text}
 
 body.is-dragging [data-dropback]{outline:2px dashed color-mix(in srgb,var(--info) 55%,transparent);outline-offset:-2px}
 [data-dropback].drop-over{outline:2px solid var(--info)!important;background:color-mix(in srgb,var(--info) 8%,var(--panel))!important}
+
+th.selc,td.selc{width:34px;text-align:center}
+td.selc input,th.selc input{width:16px;height:16px;cursor:pointer}
+.selbar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--bad) 8%,var(--panel));box-shadow:var(--sh)}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -739,9 +743,12 @@ function ocupacaoHtml(d){const cards=d.grupos.flatMap(g=>g.cards.map(c=>({g:g.no
    ${cards.sort((a,b)=>b.o.ref-a.o.ref).map(c=>{const v=c.v;return `<tr><td><span class="plate">${esc(v.matricula||v.ident)}</span>${v.virtual?` <b>${esc(v.pm.id)}</b>`:""}</td><td>${esc((v.virtual?v.pm.mot:v.motorista)||"—")}</td><td>${esc(vTag(v))}</td><td class="r num">${c.o.n}</td><td class="r num">${hTxt(c.o.prev)}</td><td class="r num">${c.o.real?hTxt(c.o.real):"—"}</td><td>${occBar(c.o,true)}</td><td><span class="chip c-${c.o.ref===0?"idle":c.o.est}">${esc(c.o.lab)}</span></td></tr>`;}).join("")}</tbody></table></div>
    <div class="def">Horas de cada serviço no dia, do início ao fim previstos (sem fim previsto contam ${hTxt(CFG().duracaoPadraoH)}). “Real” usa as horas validadas na execução. A jornada normal (${hTxt(J)}) e a máxima com extensão (${hTxt(cards[0].o.X)}) configuram-se em Configurações.</div>`;}
 function fimPrevisto(p){if(p.previstoFim)return Date.parse(p.previstoFim);if(p.previstoInicio)return Date.parse(p.previstoInicio)+CFG().duracaoPadraoH*3600000;return null;}
-function emAtraso(p,now=Date.now()){if(FINAIS.includes(p.estado)||p.estado==="Rascunho")return false;const tol=CFG().toleranciaMin*60000;let ref=null;
-  if(p.estado==="Em execução")ref=fimPrevisto(p);else if(p.estado==="Agendado")ref=p.previstoInicio?Date.parse(p.previstoInicio):null;else ref=p.pretendidaEm?Date.parse(p.pretendidaEm):null;
-  return ref!=null&&now>ref+tol;}
+/* Em atraso: a data pretendida já passou e o pedido continua pendente (não concluído, cancelado ou rejeitado).
+   Pedidos sem hora contam até ao fim desse dia. Em execução: passou a conclusão prevista. */
+function emAtraso(p,now=Date.now()){if(FINAIS.includes(p.estado)||p.estado==="Rascunho")return false;const tol=CFG().toleranciaMin*60000;
+  if(p.estado==="Em execução"){const f=fimPrevisto(p);return f!=null&&now>f+tol;}
+  const pr=p.pretendidaEm||p.periodoInicio;if(!pr)return false;let ref=Date.parse(pr);if(p.pretendidaSemHora)ref=diaIntervalo(dayKey(pr))[1]-1;
+  return now>ref+tol;}
 function prazoRef(p){const r=CFG().refPrazo;return p[r]||null;}
 function dentroPrazo(p){if(!isC(p))return null;const pr=prazoRef(p);if(!pr||!p.conclusaoEfetiva)return null;return Date.parse(p.conclusaoEfetiva)<=Date.parse(pr)+CFG().toleranciaMin*60000;}
 const tAprov=p=>p.aprovadoEm&&p.submetidoEm?Date.parse(p.aprovadoEm)-Date.parse(p.submetidoEm):null;
@@ -848,7 +855,7 @@ function tbl(id,cols,rows,o={}){const st=S.sort[id]||{k:o.k||cols[0].k,d:o.d||"a
   rows=[...rows].sort((a,b)=>{let x=sv(a),y=sv(b);if(x==null||x==="")return 1;if(y==null||y==="")return -1;if(typeof x==="string")return x.localeCompare(String(y),"pt",{numeric:true})*(st.d==="asc"?1:-1);return (x>y?1:x<y?-1:0)*(st.d==="asc"?1:-1);});
   const size=o.size||50,pg=Math.min(S.pg[id]||0,Math.max(0,Math.ceil(rows.length/size)-1)),sl=rows.slice(pg*size,pg*size+size);
   const dc=o.del||DEL_COL[id];const body=sl.map(r=>`<tr ${o.row?`class="click" data-act="${o.row}" data-a="${esc(r.id)}"`:""} ${dc&&podeEliminar()?`data-del="${dc}|${esc(r.id)}"`:""}>${cols.map(c=>`<td class="${c.cls||""}">${c.v?c.v(r):esc(r[c.k])}</td>`).join("")}</tr>`).join("")||`<tr><td colspan="${cols.length}" class="muted">${esc(o.empty||"Sem registos.")}</td></tr>`;
-  return `<div class="tw"><table><thead><tr>${cols.map(c=>`<th class="${c.cls||""}">${c.nosort?esc(c.l):`<button data-act="sort" data-a="${id}|${c.k}">${esc(c.l)}${st.k===c.k?(st.d==="asc"?" ▲":" ▼"):""}</button>`}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`+
+  return `<div class="tw"><table><thead><tr>${cols.map(c=>`<th class="${c.cls||""}">${c.hd?c.hd:c.nosort?esc(c.l):`<button data-act="sort" data-a="${id}|${c.k}">${esc(c.l)}${st.k===c.k?(st.d==="asc"?" ▲":" ▼"):""}</button>`}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`+
    (rows.length>size?`<div class="pager"><span>${pg*size+1}–${Math.min(rows.length,pg*size+size)} de ${rows.length}</span><button class="btn sm" data-act="page" data-a="${id}|-1" ${pg===0?"disabled":""}>Anterior</button><button class="btn sm" data-act="page" data-a="${id}|1" ${(pg+1)*size>=rows.length?"disabled":""}>Seguinte</button></div>`:"");}
 
 function bars(items,o={}){if(!items.length)return `<div class="empty">${esc(o.empty||"Sem dados no período e filtros selecionados.")}</div>`;const max=Math.max(...items.map(i=>i.v),1);
@@ -947,14 +954,17 @@ function pedCols(){return [{k:"numero",l:"Nº",v:p=>pn(p)},{k:"tipo",l:"Tipo",v:
   {k:"mat",l:"Pedido",v:p=>resumoHtml(p),s:p=>matDesc(p)},{k:"eq",l:"Equipamento",v:p=>esc(eqTxt(p)),s:p=>eqTxt(p)},
   {k:"pretendidaEm",l:"Pretendido",v:p=>`<span class="num">${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</span>`},{k:"previstoInicio",l:"Previsto",v:p=>`<span class="num">${fmtDT(p.previstoInicio)}</span>`},
   {k:"origem",l:"Origem",v:p=>chipO(p),s:p=>origem(p)},{k:"estado",l:"Estado",v:p=>chipE(p.estado)+chipAtr(p),s:p=>ESTADOS.indexOf(p.estado)},{k:"prioridade",l:"Prioridade",v:p=>chipP(p.prioridade),s:p=>PRIO_ORD[p.prioridade]}];}
-function pedTable(id,ps){return tbl(id,pedCols(),ps,{row:"ped",k:"numero",d:"desc",empty:"Nenhum pedido corresponde aos filtros."});}
+function pedTable(id,ps){const sel=id==="ped"&&podeEliminar();S.selPed=S.selPed||new Set();const vis=new Set(ps.map(p=>p.id));[...S.selPed].forEach(x=>{if(!M.ped[x])S.selPed.delete(x);});
+  const n=S.selPed.size,todos=ps.length&&ps.every(p=>S.selPed.has(p.id));
+  const cols=sel?[{k:"_sel",l:"",nosort:true,cls:"selc",hd:`<input type="checkbox" data-act="selAll" ${todos?"checked":""} aria-label="Selecionar todos">`,v:p=>`<input type="checkbox" data-act="selPed" data-a="${p.id}" ${S.selPed.has(p.id)?"checked":""} aria-label="Selecionar ${esc(numT(p))}">`}].concat(pedCols()):pedCols();
+  return (sel&&n?`<div class="selbar"><b>${n} pedido(s) selecionado(s)</b>${[...S.selPed].some(x=>!vis.has(x))?` <small class="muted">(alguns fora dos filtros atuais)</small>`:""}<span style="flex:1"></span><button class="btn sm ghost" data-act="selClr">Limpar seleção</button><button class="btn sm bad" data-act="delPeds">Eliminar selecionados</button></div>`:"")+tbl(id,cols,ps,{row:"ped",k:"numero",d:"desc",empty:"Nenhum pedido corresponde aos filtros."});}
 function vPedidos(){const f=S.f.ped;const ps=pedFilt();const users=S.d.utilizadores;
   return `<div class="phead"><div><h1>Pedidos de transporte</h1><p>${ps.length} pedido(s)${f.ids?` · filtro de análise: <b>${esc(f.idsLabel)}</b> <button class="btn sm" data-act="clrids">Remover</button>`:""}</p></div>
    <div class="row">${can.log()?`<label class="btn" for="up_cis">Importar pedidos de cisternas (Excel)<input id="up_cis" type="file" accept=".xlsx,.xls" data-cis="1" hidden></label>`:""}<button class="btn" data-act="exp" data-a="ped|xlsx">Exportar Excel</button><button class="btn" data-act="exp" data-a="ped|pdf">Exportar PDF</button></div></div>
   <div class="filters">${fld("f.ped.q","Pesquisar",{live:true,ph:"nº, obra, matrícula…"})}${fld("f.ped.tipo","Tipo de pedido",{type:"select",opts:optTipos()})}${fld("f.ped.estado","Estado",{type:"select",opts:opt0().concat(ESTADOS.map(e=>[e,e]))})}${fld("f.ped.prioridade","Prioridade",{type:"select",opts:opt0("Todas").concat(PRIOS)})}
    ${fld("f.ped.zona","Zona",{type:"select",opts:optZonas("Todas")})}${fld("f.ped.obra","Obra",{type:"select",opts:optObras("Todas",true)})}${fld("f.ped.cat","Categoria",{type:"select",opts:optCats("Todas")})}${fld("f.ped.eq","Equipamento",{type:"select",opts:optEqs(f.cat)})}
    ${fld("f.ped.mat","Material ou máquina",{type:"select",opts:opt0().concat(S.d.materiais.map(m=>[m.id,m.nome]))})}${fld("f.ped.origem","Origem",{type:"select",opts:optOrig})}${fld("f.ped.transp","Transportadora",{type:"select",opts:optTransp("Todas")})}
-   ${fld("f.ped.gestor","Gestor responsável",{type:"select",opts:opt0().concat(users.map(u=>[u.id,`${nome(u.id)} (${ROLE_LABEL[u.perfil]||""})`]))})}
+   ${fld("f.ped.gestor","Gestor responsável",{type:"select",opts:optGestores()})}
    ${fld("f.ped.cDe","Criado desde",{type:"date"})}${fld("f.ped.cAte","Criado até",{type:"date"})}${fld("f.ped.pDe","Previsto desde",{type:"date"})}${fld("f.ped.pAte","Previsto até",{type:"date"})}${fld("f.ped.eDe","Executado desde",{type:"date"})}${fld("f.ped.eAte","Executado até",{type:"date"})}
    ${fld("f.ped.atraso","Só em atraso",{type:"check"})}<button class="btn ghost" data-act="clrf" data-a="ped">Limpar filtros</button></div>
   ${scope().length?pedTable("ped",ps):`<div class="empty"><b>Ainda não há pedidos.</b><br>Os pedidos aparecem aqui depois de um gestor de obra os criar em “Novo pedido”.</div>`}`;}
@@ -1508,6 +1518,10 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
       `<button class="btn" data-act="close">Voltar</button>${m.tipo==="aprovar"?`<button class="btn" data-act="doDecisao" data-a="agendar">Aprovar e agendar</button>`:""}<button class="btn ${L[2]}" data-act="doDecisao">${L[1]}</button>`,true);}
   if(m.t==="agendar")return wrap(`<h2>${P.estado==="Agendado"?"Reagendar":"Agendar"} ${esc(P.numero)}</h2>`,agendarBody(P,m),`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="doAgendar">${P.estado==="Agendado"?"Guardar alterações":"Agendar transporte"}</button>`);
   if(m.t==="iniciar")return wrap(`<h2>Iniciar execução ${esc(P.numero)}</h2>`,`${fld("modal.f.inicio","Data e hora efetivas de início",{type:"datetime-local",req:true})}<p class="muted">Previsto: ${fmtDT(P.previstoInicio)}</p>`,`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="doIniciar">Marcar em execução</button>`,true);
+  if(m.t==="delPeds"){const ids=[...(S.selPed||[])].filter(id=>M.ped[id]);const at=ids.filter(id=>["Agendado","Em execução"].includes(M.ped[id].estado)).length;
+    return wrap(`<h2>Eliminar ${ids.length} pedido(s)?</h2>`,`<p style="margin:0">Os pedidos deixam de aparecer na lista, no plano e nos relatórios. Ficam no <b>Registo de eliminações</b> (Configurações), de onde podem ser restaurados.</p>
+     ${at?`<div class="note warn">${at} destes pedidos estão agendados ou em execução.</div>`:""}<div class="row" style="gap:6px">${ids.slice(0,60).map(id=>pn(M.ped[id])).join("")}${ids.length>60?` <small>+${ids.length-60}</small>`:""}</div>`,
+     `<button class="btn" data-act="close">Cancelar</button><button class="btn bad" data-act="doDelPeds">Eliminar ${ids.length} pedido(s)</button>`,true);}
   if(m.t==="editValid"){const fe=P.estado==="Concluído";const a=fromInput(m.f.inicio),z=fe?fromInput(m.f.fim):null;const dr=a&&z?Date.parse(z)-Date.parse(a):null;const dp=P.previstoInicio?fimPrevisto(P)-Date.parse(P.previstoInicio):null;
     return wrap(`<h2>Editar validação ${esc(P.numero)}</h2>`,`<p class="muted" style="margin:0">${esc(destTxt(P))} · ${esc(matDesc(P)||"")} · previsto ${fmtDT(P.previstoInicio)}${P.previstoFim?" → "+fmtDT(P.previstoFim):""}</p>
      <div class="grid g2">${fld("modal.f.inicio","Data e hora reais de início",{type:"datetime-local",req:true})}${fe?fld("modal.f.fim","Data e hora reais de conclusão",{type:"datetime-local",req:true}):""}</div>
@@ -1704,6 +1718,14 @@ const A={
   async desagendar(pid){const P=M.ped[pid];if(!P||!can.log())return;if(["Aprovado","Por agendar"].includes(P.estado))return;
     if(P.estado!=="Agendado"){toast(`${numT(P)} está “${P.estado}” e não pode voltar a “Por agendar”.`,"bad");return;}
     await savePed(P,{estado:"Por agendar",previstoInicio:null,previstoFim:null,agendadoEm:null,recurso:{custoEfetivo:P.recurso?.custoEfetivo??null},historico:hist(P,"Desagendado",`Retirado de ${recursoTxt(P)} (${fmtDT(P.previstoInicio)})`)},`${numT(P)} voltou a “Por agendar”.`);render();},
+  selPed(id){S.selPed=S.selPed||new Set();S.selPed.has(id)?S.selPed.delete(id):S.selPed.add(id);render();},
+  selAll(){S.selPed=S.selPed||new Set();const ps=pedFilt();const all=ps.every(p=>S.selPed.has(p.id));ps.forEach(p=>all?S.selPed.delete(p.id):S.selPed.add(p.id));render();},
+  selClr(){S.selPed=new Set();render();},
+  delPeds(){if(!podeEliminar()||!S.selPed||!S.selPed.size)return;S.modal={t:"delPeds",f:{}};render();},
+  async doDelPeds(){if(!podeEliminar())return;const ids=[...S.selPed].filter(id=>M.ped[id]);const btn=document.querySelector("[data-act=doDelPeds]");if(btn)btn.disabled=true;let n=0;
+    try{for(const id of ids){const p=M.ped[id];const dados=Object.fromEntries(Object.entries(p).filter(([k])=>k!=="id"));await db.collection("eliminados").doc().set({col:"pedidos",docId:id,nome:`Pedido ${numT(p)}`,dados,por:S.me.id,em:nowISO()});await db.doc("pedidos/"+id).delete();n++;}
+      toast(`${n} pedido(s) eliminado(s). Pode restaurá-los em Configurações › Registo de eliminações.`);}catch(e){toast(errMsg(e)+` (${n} eliminados antes do erro)`,"bad");}
+    S.selPed=new Set();S.modal=null;render();},
   editValid(id){const P=M.ped[id];S.modal={t:"editValid",id,f:{inicio:toInput(P.inicioEfetivo||P.previstoInicio),fim:toInput(P.conclusaoEfetiva||nowISO()),custoEfetivo:P.recurso?.custoEfetivo??"",motivo:""}};render();},
   async doEditValid(){const m=S.modal,P=M.ped[m.id],f=m.f;const fe=P.estado==="Concluído";const ini=fromInput(f.inicio),fim=fe?fromInput(f.fim):null;
     if(!ini||(fe&&!fim)){m.err="Indique as datas e horas reais.";return render();}if(fe&&fim<ini){m.err="A conclusão não pode ser anterior ao início.";return render();}
