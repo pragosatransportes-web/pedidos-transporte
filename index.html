@@ -1014,7 +1014,7 @@ function secCarga(){const mats=S.d.materiais.filter(m=>m.ativo!==false);
    ${mats.length?fld("form.cMat","Material do catálogo",{type:"select",opts:[["","—"]].concat(mats.map(m=>[m.id,m.nome]))}):""}
    ${fld("form.cC","Comprimento (m)",{type:"number",step:"any",min:0})}${fld("form.cL","Largura (m)",{type:"number",step:"any",min:0})}${fld("form.cA","Altura (m)",{type:"number",step:"any",min:0})}
    ${fld("form.cPeso","Peso (t)",{type:"number",step:"any",min:0})}${fld("form.cVol","Nº de volumes ou paletes",{type:"number",min:0})}
-   <small class="full">Dimensão da carga: indique as medidas, o peso, ou ambos.</small>`;}
+   <small class="full">Dimensões e peso são opcionais, mas ajudam a escolher a viatura.</small>`;}
 function vTotal(F){return Math.max(1,numOr(F.vQtd)||1)+F.vExtra.reduce((a,L)=>a+Math.max(1,numOr(L.qtd)||1),0);}
 function vLinhaHtml(L,i){const p=`form.vExtra.${i}`;const eq=M.eq[L.equipamentoId];const vars=(eq&&eq.variantes)||[];
   return `<div class="xline"><div class="xh"><b>Viatura ${i+2}</b><button type="button" class="btn sm ghost" data-act="vRem" data-a="${i}" aria-label="Remover linha">× Remover</button></div><div class="xg">
@@ -1095,7 +1095,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
     if(t==="armazem"||t==="fornecedor"){need(F.categoriaId,"tipo de viatura");need(F.equipamentoId,"viatura");}
     if(t==="armazem")need(String(F.box||"").trim(),"box de carga");
     if(t==="fornecedor")need(fornNome,"fornecedor");
-    if(t==="armazem"||t==="fornecedor"){need(carga.descricao,"descrição da carga");need([carga.c,carga.l,carga.a,carga.peso].some(x=>x!=null),"dimensão ou peso da carga");}
+    if(t==="armazem"||t==="fornecedor"){need(carga.descricao,"descrição da carga");}
     if(t==="recolha"){need(F.equipamentoId,"tipo de equipamento para recolha");need(numOr(F.nCargas)>=1,"nº de cargas");}
     if(t==="maquina")need(F.maquinas.length,"máquinas a transportar");
     if(t==="cisterna"){if(F.clienteId&&F.clienteId!=="__outro")F.cliente=M.cli[F.clienteId]?.nome||F.cliente;need(String(F.cliente||"").trim(),"cliente");need(F.cMat&&(F.cMat!=="__outro"||String(F.cMatOutro||"").trim()),"material");need(numOr(F.nCargas)>=1,"nº de cargas");}
