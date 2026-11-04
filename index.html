@@ -225,6 +225,13 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;min-width:0;overflow-wrap:anywher
 .pc-title{font-family:var(--f-display);font-size:24px;font-weight:700;letter-spacing:.05em}
 .pc-date{font-size:18px;margin-left:8px}
 .pc-g{margin-top:4px}
+.dv-l{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.dv{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:8px 10px;align-items:start}
+.dv.vz{background:var(--panel2)}.dv.indisp{opacity:.6}
+.dv-v{display:flex;flex-direction:column;gap:2px;min-width:0}.dv-v small{color:var(--muted)}
+.dv-p{display:flex;flex-direction:column;gap:6px;min-width:0;align-self:center}
+.dv-p .ev{display:grid;grid-template-columns:64px 1fr;gap:10px;padding:6px 8px;font-size:13px}
+@media (max-width:720px){.dv{grid-template-columns:1fr}}
 .pc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
 .pc{background:var(--panel);border:1px solid var(--ink);border-radius:3px;display:flex;flex-direction:column;min-width:0}
 .pc header{padding:7px 9px;border-bottom:1px solid var(--ink);display:flex;flex-direction:column;gap:2px}
@@ -1264,7 +1271,7 @@ function vAgenda(){const f=S.f.ag;const ps=agFilt(scope());const plan=ps.filter(
   const porAg=ps.filter(p=>["Aprovado","Por agendar"].includes(p.estado)).sort((a,b)=>PRIO_ORD[a.prioridade]-PRIO_ORD[b.prioridade]||String(a.pretendidaEm).localeCompare(b.pretendidaEm));
   const today=todayKey();let body="",title="";
   if(f.vista==="plano"){title="";body=planoHtml();}
-  else if(f.vista==="dia"){title=`${DIAS[dow(f.data)]} ${fmtD(f.data)}`;const a=byDay.get(f.data)||[];body=`<div class="daylist conf">${a.map(p=>evHtml(p,{day:1})).join("")||`<div class="empty">Sem transportes planeados para este dia.</div>`}</div>`;}
+  else if(f.vista==="dia"){title=`${DIAS[dow(f.data)]} ${fmtD(f.data)}`;const a=byDay.get(f.data)||[];body=diaHtml();}
   else if(f.vista==="semana"){const mon=addDays(f.data,-dow(f.data));title=`Semana de ${fmtD(mon)} a ${fmtD(addDays(mon,6))}`;
     body=`<div style="overflow-x:auto"><div class="cal-week">${[0,1,2,3,4,5,6].map(i=>{const k=addDays(mon,i);const a=byDay.get(k)||[];return `<div class="cal-day ${k===today?"today":""}"><div class="dh"><span>${DIAS[i]} ${fmtD(k).slice(0,5)}</span><span>${a.length||""}</span></div>${a.map(p=>evHtml(p)).join("")}</div>`;}).join("")}</div></div>`;}
   else if(f.vista==="mes"){const[y,m]=f.data.split("-");const first=`${y}-${m}-01`;const start=addDays(first,-dow(first));title=`${["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][+m-1]} ${y}`;
@@ -1334,7 +1341,7 @@ const unidadesPlano=()=>viaturasAll().filter(v=>v.ativo!==false&&v.unidade!=="re
 function diasDoPedido(p){if(!p.previstoInicio)return[];const a=dayKey(p.previstoInicio),b=p.previstoFim?dayKey(p.previstoFim):a;const out=[];let k=a,g=0;while(k<=b&&g++<62){out.push(k);k=addDays(k,1);}return out;}
 function optGestores(){const gs=S.d.gestores.filter(g=>g.ativo!==false);if(gs.length)return opt0().concat(gs.map(g=>[g.id,g.nome]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));
   const ids=new Set([...S.d.utilizadores.filter(u=>u.ativo!==false).map(u=>u.id),...S.d.obras.map(o=>o.gestorId).filter(Boolean)]);wantProf([...ids]);return opt0().concat([...ids].map(i=>[i,nome(i)]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));}
-function planoData(){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
+function planoData(opt={}){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
   const doDia=ps.filter(p=>["Agendado","Em execução","Concluído"].includes(p.estado)&&diasDoPedido(p).includes(dia)).sort((a,b)=>String(a.previstoInicio).localeCompare(b.previstoInicio));
   const porVia=groupBy(doDia.filter(p=>origem(p)==="propria"&&p.recurso.viaturaId),p=>p.recurso.viaturaId);
   const ext=doDia.filter(p=>origem(p)==="externa");
@@ -1344,8 +1351,8 @@ function planoData(){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
   const cand=scope().filter(p=>["Aprovado","Por agendar"].includes(p.estado)).concat(porAtribuir.filter(p=>p.estado==="Agendado")).sort((a,b)=>String(refDia(a)).localeCompare(String(refDia(b))));
   const restr=f.obra||f.tipo||f.cat;const G=f.gestor&&M.gest[f.gestor];
   let vs=unidadesPlano();if(f.viatura)vs=vs.filter(v=>v.id===f.viatura);if(G)vs=vs.filter(v=>gestorCobreViatura(G,v)||porVia.has(v.id));if(f.empresa)vs=vs.filter(v=>vEmpresa(v)===f.empresa);if(f.zona)vs=vs.filter(v=>vZona(v)===f.zona||porVia.has(v.id));
-  if(f.eq)vs=vs.filter(v=>vEqs(v).some(e=>eqIn(f.eq,e))||porVia.has(v.id));
-  if(restr||f.soCargas)vs=vs.filter(v=>porVia.has(v.id));
+  if(f.eq)vs=vs.filter(v=>vEqs(v).some(e=>eqIn(f.eq,e))||(!opt.todas&&porVia.has(v.id)));
+  if(!opt.todas&&(restr||f.soCargas))vs=vs.filter(v=>porVia.has(v.id));
   if(f.origem==="externa")vs=[];
   const eqOrd=id=>{const e=M.eq[id];if(!e)return 9999;return (M.cat[e.categoriaId]?.ordem??9)*100+(e.ordem??99);};
   const gk=v=>vEqs(v)[0]||"";
@@ -1370,6 +1377,22 @@ function planoHtml(){const d=planoData();const vista=S.planoVista||window.__plan
   ${!tot&&!d.ext.length&&!d.porAtribuir.length?`<div class="empty">${unidadesPlano().length?"Nenhuma viatura ou transporte corresponde aos filtros neste dia.":"Ainda não há viaturas na frota própria. Importe as listas de viaturas em Frota própria."}</div>`:""}
   ${(d.porAtribuir.length||d.ext.length)?`<div class="pc-grid">${d.porAtribuir.length?planoCard({id:"_pa"},d.porAtribuir,d,{titulo:"Por atribuir",sub:"Pedidos do dia sem viatura própria nem transportadora",cls:"pa",sem:true}):""}${d.ext.length?planoCard({id:"_ex"},d.ext,d,{titulo:"Veículos externos",sub:[...new Set(d.ext.map(p=>M.tr[p.recurso?.transportadoraId]?.nome).filter(Boolean))].join(" · "),cls:"ex",sem:true}):""}</div>`:""}
   ${d.grupos.map(g=>`<h3 class="pc-g">${esc(g.nome)} <span class="muted">(${g.cards.length})</span></h3><div class="pc-grid">${g.cards.map(c=>planoCard(c.v,c.peds,d)).join("")}</div>`).join("")}`}`;}
+/* Vista Dia: todas as viaturas da frota própria agrupadas pelo gestor responsável, com os transportes do dia */
+function diaHtml(){const d=planoData({todas:true}),f=S.f.ag;
+  const vs=d.grupos.flatMap(g=>g.cards);const gs=S.d.gestores.filter(g=>gAtivo(g)&&!gSemCob(g)&&(!f.gestor||g.id===f.gestor)).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt"));
+  const usados=new Set();const blocos=gs.map(g=>{const cs=vs.filter(c=>gestorCobreViatura(g,c.v));cs.forEach(c=>usados.add(c.v.id));
+    const pl=pessoaLog(g);return{t:g.nome||pl?.nome||"Gestor",sub:[g.funcao,EMPRESAS.filter(e=>gEmp(g).includes(e[0])).map(e=>e[1]).join(", "),gZo(g).map(z=>M.zona[z]?.nome).filter(Boolean).join(", ")].filter(Boolean).join(" · "),cs};}).filter(b=>b.cs.length);
+  const resto=vs.filter(c=>!usados.has(c.v.id));if(resto.length&&!f.gestor)blocos.push({t:"Sem gestor responsável",sub:"Viaturas que não estão na cobertura de nenhum gestor (definir em Utilizadores / gestores)",cs:resto});
+  else if(resto.length&&f.gestor&&!blocos.length)blocos.push({t:gestorNome(f.gestor),sub:"",cs:resto});
+  const linha=c=>{const v=c.v,mot=v.virtual?v.pm.mot:v.motorista,ind=(v.disponibilidade||"disponivel")!=="disponivel";
+    return `<div class="dv ${c.peds.length?"":"vz"} ${ind?"indisp":""}" ${can.log()?`data-drop="${esc(v.id)}"`:""}><div class="dv-v"><span class="plate">${esc(v.matricula||v.ident)}</span>${v.virtual?` <b>${esc(v.pm.id)}</b>`:""}<span class="pc-tag">${esc(vTag(v))}</span><small>${esc([vReboques(v),mot||"sem motorista",vEmpresa(v),M.zona[vZona(v)]?.nome,ind?(v.disponibilidade==="manutencao"?"em manutenção":"indisponível"):""].filter(Boolean).join(" · "))}</small>${occBar(ocupacao(v.id,d.dia))}</div>
+     <div class="dv-p">${c.peds.length?c.peds.map(p=>evHtml(p,{day:1})).join(""):`<span class="muted">Sem transportes neste dia</span>`}</div></div>`;};
+  const nV=vs.length,nC=vs.filter(c=>c.peds.length).length;
+  const extra=(d.porAtribuir.length?`<h3 class="pc-g">Por atribuir <span class="muted">(${d.porAtribuir.length})</span></h3><div class="daylist conf">${d.porAtribuir.map(p=>evHtml(p,{day:1})).join("")}</div>`:"")
+   +(d.ext.length?`<h3 class="pc-g">Veículos externos <span class="muted">(${d.ext.length})</span></h3><div class="daylist conf">${d.ext.map(p=>evHtml(p,{day:1})).join("")}</div>`:"");
+  if(!nV&&!extra)return `<div class="empty">${unidadesPlano().length?"Nenhuma viatura corresponde aos filtros.":"Ainda não há viaturas na frota própria. Importe as listas de viaturas em Frota própria."}</div>`;
+  return `<p class="muted" style="margin:0 0 6px">${d.n} transporte(s) · ${nC} de ${nV} viaturas com transportes</p>${extra}
+   ${blocos.map(b=>`<section class="dg"><h3 class="pc-g">${esc(b.t)} <span class="muted">(${b.cs.length} viatura${b.cs.length===1?"":"s"} · ${b.cs.filter(c=>c.peds.length).length} com transportes)</span></h3>${b.sub?`<div class="muted" style="font-size:12px;margin:-2px 0 6px">${esc(b.sub)}</div>`:""}<div class="dv-l">${b.cs.map(linha).join("")}</div></section>`).join("")}`;}
 function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return "";S.plExp=S.plExp||{};const NC=7;
   const head=`<tr><th>Viatura</th><th>Hora</th><th>Nº pedido</th><th>Obra / cliente</th><th>Pedido</th><th>Destino</th><th>Estado</th></tr>`;
   const linhas=(v,peds,lab)=>{const aberto=v&&S.plExp[v.id];const n=Math.max(peds.length,1);
