@@ -1417,25 +1417,34 @@ function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return 
   d.grupos.forEach(g=>{b+=sec(g.nome,g.cards.length,g.cards.map(c=>linhas(c.v,c.peds)).join(""));});
   const todos=d.grupos.flatMap(g=>g.cards.map(c=>c.v.id));const algum=todos.some(id=>S.plExp[id]);
   return `<div class="row" style="justify-content:flex-end;margin:-4px 0 6px"><button class="btn sm ghost" data-act="plExpAll" data-a="${algum?"0":"1"}">${algum?"Recolher todas":"Expandir todas"}</button></div><div class="tw"><table class="plano-lista"><thead>${head}</thead><tbody>${b}</tbody></table></div>`;}
-async function exportPlano(fmt){const d=planoData(),dt=fmtD(d.dia),gerado=fmtDT(nowISO());
-  const fl=filtrosTxt(S.f.ag,{eq:"Equipamento",obra:"Obra",gestor:"Gestor",tipo:"Tipo de pedido",zona:"Zona",origem:"Origem",viatura:"Viatura"});
-  const cards=[];if(d.porAtribuir.length)cards.push({t1:"POR ATRIBUIR",t2:"Pedidos sem viatura",peds:d.porAtribuir});if(d.ext.length)cards.push({t1:"VEÍCULOS EXTERNOS",t2:"",peds:d.ext});
-  d.grupos.forEach(g=>g.cards.forEach(c=>{const v=c.v;cards.push({t1:`${v.matricula||v.ident}${v.virtual?" "+v.pm.id:""}   ${vTag(v)}`,t2:`${vReboques(v)||"—"}  -  ${(v.virtual?v.pm.mot:v.motorista)||"sem motorista"}`,peds:c.peds,v});}));
+const EXP_EST=[["pa","Por agendar",["Pendente de aprovação","Aprovado","Por agendar"]],["ag","Agendado",["Agendado"]],["ex","Em execução",["Em execução"]],["co","Concluído",["Concluído"]]];
+function expPlanoCards(dia,est){const f=S.f.ag,keep=f.data;f.data=dia;let d;try{d=planoData();}finally{f.data=keep;}const ok=p=>est.includes(p.estado);
+  const cards=[];const pa=d.porAtribuir.filter(ok),ex=d.ext.filter(ok);if(pa.length)cards.push({t1:"POR ATRIBUIR",t2:"Pedidos sem viatura",peds:pa});if(ex.length)cards.push({t1:"VEÍCULOS EXTERNOS",t2:"",peds:ex});
+  d.grupos.forEach(g=>g.cards.forEach(c=>{const v=c.v;cards.push({t1:`${v.matricula||v.ident}${v.virtual?" "+v.pm.id:""}   ${vTag(v)}`,t2:`${vReboques(v)||"—"}  -  ${(v.virtual?v.pm.mot:v.motorista)||"sem motorista"}`,peds:c.peds.filter(ok),v});}));
+  return{dia,cards};}
+async function exportPlano(fmt,o={}){const de=o.de||S.f.ag.data,ate=o.a||de;const est=o.est||EXP_EST.flatMap(e=>e[2]);const gerado=fmtDT(nowISO());
+  const dias=[];for(let k=de,g=0;k<=ate&&g<62;k=addDays(k,1),g++)dias.push(k);const um=dias.length===1;
+  const fl=[filtrosTxt(S.f.ag,{eq:"Equipamento",obra:"Obra",gestor:"Gestor",tipo:"Tipo de pedido",zona:"Zona",origem:"Origem",viatura:"Viatura"}),"Estados: "+(o.estLab||"todos")].filter(Boolean).join(" · ");
+  const per=um?fmtD(de):`${fmtD(de)} a ${fmtD(ate)}`,nomeF=`plano-cargas-${de}${um?"":"_a_"+ate}`;
+  const DD=dias.map(k=>expPlanoCards(k,est)).map(x=>um?x:{...x,cards:x.cards.filter(c=>c.peds.length)});
   toast("A preparar o ficheiro…");
   try{if(fmt==="xlsx"){await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
-      const aoa=[["Plano de cargas",dt],["Gerado em",gerado],["Filtros",fl],[],["Viatura","Tipo","Reboque","Motorista","Hora","Nº pedido","Obra","Pedido","Destino","Estado"]];
-      cards.forEach(c=>{if(!c.peds.length){aoa.push([c.t1,"",c.t2]);return;}c.peds.forEach(p=>{const x=itemTxt(p,d.dia);aoa.push([c.v?(c.v.matricula||c.v.ident):c.t1,c.v?vTag(c.v):"",c.v?vReboques(c.v):"",c.v?((c.v.virtual?c.v.pm.mot:c.v.motorista)||""):"",x.h,p.numero,destTxt(p),matDesc(p),p.localDescarga||"",p.estado]);});});
-      const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[14,22,18,22,7,13,28,40,22,14].map(w=>({wch:w}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Plano");
-      await saveFile(`plano-cargas-${d.dia}.xlsx`,new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})]));return;}
+      const aoa=[["Plano de cargas",per],["Gerado em",gerado],["Filtros",fl],[],["Data","Viatura","Tipo","Reboque","Motorista","Hora","Nº pedido","Obra","Pedido","Destino","Estado"]];
+      DD.forEach(D=>D.cards.forEach(c=>{if(!c.peds.length){aoa.push([fmtD(D.dia),c.t1,"",c.t2]);return;}c.peds.forEach(p=>{const x=itemTxt(p,D.dia);aoa.push([fmtD(D.dia),c.v?(c.v.matricula||c.v.ident):c.t1,c.v?vTag(c.v):"",c.v?vReboques(c.v):"",c.v?((c.v.virtual?c.v.pm.mot:c.v.motorista)||""):"",x.h,p.numero,destTxt(p),matDesc(p),p.localDescarga||"",p.estado]);});}));
+      if(aoa.length===5)aoa.push(["","Sem transportes para os estados e datas escolhidos."]);
+      const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[11,14,22,18,22,7,13,28,40,22,14].map(w=>({wch:w}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Plano");
+      await saveFile(nomeF+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})]));return;}
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");const doc=new window.jspdf.jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
-    const M0=8,cols=3,gap=3,gw=(210-2*M0-(cols-1)*gap)/cols,lines=7,lh=4.6,ch=12+lines*lh;let x=M0,y=22,i=0;
-    const head=()=>{doc.setFont("helvetica","bold");doc.setFontSize(15);doc.text(`PLANO DE CARGAS     ${dt.replace(/\//g," / ")}`,M0,13);doc.setFont("helvetica","normal");doc.setFontSize(7);doc.text(`Gerado em ${gerado} · ${fl}`,M0,18);};head();
-    cards.forEach(c=>{if(y+ch>290){doc.addPage();head();y=22;x=M0;i=0;}doc.setDrawColor(30);doc.setLineWidth(.3);doc.rect(x,y,gw,ch);
+    const M0=8,cols=3,gap=3,gw=(210-2*M0-(cols-1)*gap)/cols,lines=7,lh=4.6,ch=12+lines*lh;let x,y,i,prim=true;
+    const head=dt=>{doc.setFont("helvetica","bold");doc.setFontSize(15);doc.text(`PLANO DE CARGAS     ${dt.replace(/\//g," / ")}`,M0,13);doc.setFont("helvetica","normal");doc.setFontSize(7);doc.text(doc.splitTextToSize(`Gerado em ${gerado} · ${fl}`,194)[0],M0,18);};
+    DD.forEach(D=>{const dt=fmtD(D.dia);if(!prim)doc.addPage();prim=false;head(dt);x=M0;y=22;i=0;
+      if(!D.cards.length){doc.setFontSize(9);doc.text("Sem transportes para os estados escolhidos.",M0,28);return;}
+      D.cards.forEach(c=>{if(y+ch>290){doc.addPage();head(dt);y=22;x=M0;i=0;}doc.setDrawColor(30);doc.setLineWidth(.3);doc.rect(x,y,gw,ch);
       doc.setFont("helvetica","bold");doc.setFontSize(8.5);doc.text(doc.splitTextToSize(c.t1,gw-3)[0],x+1.5,y+4.5);doc.setFont("helvetica","normal");doc.setFontSize(7.2);doc.text(doc.splitTextToSize(c.t2,gw-3)[0]||"",x+1.5,y+9);doc.line(x,y+11,x+gw,y+11);
-      for(let k=0;k<lines;k++){const yy=y+11+lh*(k+1);if(k<lines-1){doc.setDrawColor(185);doc.setLineWidth(.15);doc.line(x+1,yy,x+gw-1,yy);}const p=c.peds[k];if(p){const t=itemTxt(p,d.dia);doc.setFontSize(6.6);doc.text(doc.splitTextToSize(`${t.h}  ${t.t}`,gw-3)[0],x+1.5,yy-1.3);}}
+      for(let k=0;k<lines;k++){const yy=y+11+lh*(k+1);if(k<lines-1){doc.setDrawColor(185);doc.setLineWidth(.15);doc.line(x+1,yy,x+gw-1,yy);}const p=c.peds[k];if(p){const t=itemTxt(p,D.dia);doc.setFontSize(6.6);doc.text(doc.splitTextToSize(`${t.h}  ${t.t}`,gw-3)[0],x+1.5,yy-1.3);}}
       if(c.peds.length>lines){doc.setFontSize(6);doc.text(`+ ${c.peds.length-lines} transporte(s)`,x+gw-22,y+ch-1);}
-      i++;if(i%cols===0){x=M0;y+=ch+gap;}else x+=gw+gap;});
-    await saveFile(`plano-cargas-${d.dia}.pdf`,doc.output("blob"));}catch(e){console.error(e);toast("Não foi possível gerar o ficheiro.","bad");}}
+      i++;if(i%cols===0){x=M0;y+=ch+gap;}else x+=gw+gap;});});
+    await saveFile(nomeF+".pdf",doc.output("blob"));}catch(e){console.error(e);toast("Não foi possível gerar o ficheiro.","bad");}}
 /* ========== FROTA ========== */
 function vFrota(){if(role()==="obra")return denied();const ff=S.f.frota;const conc=scope().filter(isC);
   const use=id=>conc.filter(p=>p.recurso?.viaturaId===id).length;const next=id=>scope().filter(p=>p.estado==="Agendado"&&p.recurso?.viaturaId===id&&p.previstoInicio>=nowISO()).sort((a,b)=>a.previstoInicio.localeCompare(b.previstoInicio))[0];
@@ -1667,6 +1676,11 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
       ${fld("modal.f.custoEfetivo","Custo efetivo (€)",{type:"number",step:"0.01",min:0,hint:"Opcional. Deixe vazio se ainda não for conhecido."})}${fld("modal.f.ocorrencia","Ocorrências, atrasos ou alterações",{type:"textarea"})}
       <div class="fld"><span>Comprovativo de execução</span>${anexosHtml(m.f.comprovativos,true,"modal")}</div>${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="doConcluir">Confirmar conclusão</button>`,true);
   if(m.t==="cancelar")return wrap(`<h2>Cancelar ${esc(P.numero)}</h2>`,`<div class="note warn">O pedido fica cancelado e não conta como execução. O histórico mantém-se.</div>${fld("modal.f.motivo","Motivo do cancelamento",{type:"textarea",req:true})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,`<button class="btn" data-act="close">Voltar</button><button class="btn bad" data-act="doCancelar">Cancelar pedido</button>`,true);
+  if(m.t==="expPlano"){const f=m.f;if(f.todos!==f._todos)EXP_EST.forEach(e=>f[e[0]]=f.todos);else f.todos=EXP_EST.every(e=>f[e[0]]);f._todos=f.todos;
+    return wrap(`<h2>Exportar plano de cargas (${m.fmt==="pdf"?"PDF":"Excel"})</h2>`,`<div class="fld"><span>Estados a incluir</span><div class="row" style="gap:14px">${EXP_EST.map(e=>fld("modal.f."+e[0],e[1],{type:"check"})).join("")}${fld("modal.f.todos","Todos",{type:"check"})}</div></div>
+     <div class="grid g2">${fld("modal.f.de","De",{type:"date",req:true,hint:"Tecla H = hoje"})}${fld("modal.f.a","A",{type:"date",req:true,hint:"Tecla H = hoje"})}</div>
+     <div class="def">Usa os filtros atuais do planeamento (gestor, tipo de viatura, empresa, zona…). Num só dia saem todas as viaturas; num período saem só as viaturas com transportes, ${m.fmt==="pdf"?"uma página por dia":"com a data em cada linha"}.</div>${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
+     `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="doExpPlano">Exportar ${m.fmt==="pdf"?"PDF":"Excel"}</button>`,true);}
   if(m.t==="regresso"){const r=P.recurso||{},R=m._reg=rotaRegresso(P,m.f.sede,()=>{if(S.modal&&S.modal.t==="regresso")render();});const base=regBase(P);const nf=R&&!R.incompleta&&base?new Date(base+R.min*60000).toISOString():null;
     return wrap(`<h2>Regressar à sede · ${esc(P.numero)}</h2>`,`<p class="muted" style="margin:0">${esc(recursoTxt(P))} · ${esc(destTxt(P))} · ${P.localDescarga?esc(P.localDescarga)+" · ":""}fim do serviço ${base?fmtDT(new Date(base).toISOString()):"—"}</p>
      ${fld("modal.f.sede","Sede de regresso",{type:"select",opts:sedesCfg().map(x=>[x.nome,"Sede · "+x.nome])})}
@@ -2051,7 +2065,10 @@ const A={
         await ref.set(p);n++;}
       toast(`${n} pedido(s) de cisternas criados.`);S.impC=null;S.modal=null;render();}catch(e){console.error(e);toast(errMsg(e)+` (${n} criados antes do erro)`,"bad");if(btn)btn.disabled=false;}},
   frotaSemEq(){S.f.frota.eq="_sem";render();},
-  expPlano(fmt){exportPlano(fmt);},
+  expPlano(fmt){const d=S.f.ag.data||todayKey();S.modal={t:"expPlano",fmt,f:{de:d,a:d,todos:true,_todos:true,...Object.fromEntries(EXP_EST.map(e=>[e[0],true]))}};render();},
+  async doExpPlano(){const m=S.modal,f=m.f;const sel=EXP_EST.filter(e=>f[e[0]]);if(!sel.length){m.err="Selecione pelo menos um estado.";return render();}if(!f.de||!f.a){m.err="Indique as datas de início e de fim.";return render();}if(f.a<f.de){m.err="A data final tem de ser igual ou posterior à inicial.";return render();}
+    const n=Math.round((Date.parse(f.a)-Date.parse(f.de))/864e5)+1;if(n>62){m.err="Escolha um período até 62 dias.";return render();}
+    const fmt=m.fmt;S.modal=null;render();await exportPlano(fmt,{de:f.de,a:f.a,est:sel.flatMap(e=>e[2]),estLab:sel.length===EXP_EST.length?"todos":sel.map(e=>e[1]).join(", ")});},
   async doImport(){const I=S.imp;if(!I||!I.res)return;const p=I.plano;const t=nowISO();let n=0;
     try{for(const x of p.novos){await db.doc("viaturas/"+x.id).set({...x.doc,criadoEm:t,criadoPor:S.me.id,origemImport:{ficheiro:I.nome,folha:I.folha,em:t}});n++;}
       for(const x of p.atual){await db.doc("viaturas/"+x.id).update({...x.doc,alteradoEm:t,alteradoPor:S.me.id,origemImport:{ficheiro:I.nome,folha:I.folha,em:t}});n++;}
@@ -2190,6 +2207,8 @@ function parseCisternas(rows){const txt=v=>v==null?"":(v instanceof Date?"":Stri
 let _downScrim=null;document.addEventListener("pointerdown",e=>{_downScrim=e.target&&e.target.classList&&e.target.classList.contains("scrim")?e.target:null;},true);
 document.addEventListener("click",e=>{const t=e.target.closest("[data-act]");if(!t)return;const fn=A[t.dataset.act];if(!fn)return;if(t.dataset.act==="closeBg"&&e.target!==t)return;if(t.tagName==="A"&&t.getAttribute("href")&&!["novo","goto","tab","novaObra"].includes(t.dataset.act))return;
   if(t.tagName!=="A")e.preventDefault();fn(t.dataset.a,t,e);if(t.dataset.act!=="menu"&&S.menu&&t.closest(".nav")){S.menu=false;render();}});
+document.addEventListener("keydown",e=>{const t=e.target;if(!(e.key==="h"||e.key==="H")||e.ctrlKey||e.metaKey||e.altKey||!t||!["date","datetime-local"].includes(t.type))return;e.preventDefault();
+  const v=t.type==="date"?todayKey():todayKey()+"T"+(String(t.value||"").slice(11,16)||fmtT(nowISO()));t.value=v;if(t.dataset&&t.dataset.b)setPath(t.dataset.b,v);t._pend=true;});
 document.addEventListener("input",e=>{const t=e.target;if(!t.dataset||!t.dataset.b||t.type==="checkbox"||t.tagName==="SELECT")return;setPath(t.dataset.b,t.value);
   if(t.dataset.b==="uq")userSearch();if(t.hasAttribute("data-r"))render();});
 let _dragPid=null;
