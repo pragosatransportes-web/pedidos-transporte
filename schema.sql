@@ -42,9 +42,7 @@ language sql stable security definer set search_path=public as $$ select public.
 create or replace function public.eu_admin() returns boolean
 language sql stable security definer set search_path=public as $$
   select exists(select 1 from app_admins a where lower(a.email)=lower(auth.jwt()->>'email'))
-      or exists(select 1 from docs d where d.col='utilizadores' and d.id=auth.uid()::text and d.data->>'perfil'='admin' and coalesce((d.data->>'ativo')::boolean,true))
-      -- convite de administrador ainda por usar, validado pelo email da sessão; depois de usado deixa de contar
-      or exists(select 1 from docs d where d.col='convites' and lower(d.data->>'email')=lower(auth.jwt()->>'email') and d.data->>'perfil'='admin' and coalesce((d.data->>'ativo')::boolean,true) and coalesce(d.data->>'usadoPor','')='') $$;
+      or exists(select 1 from docs d where d.col='utilizadores' and d.id=auth.uid()::text and d.data->>'perfil'='admin' and coalesce((d.data->>'ativo')::boolean,true)) $$;
 
 -- coleções que só o administrador altera
 create or replace function public.col_admin(c text) returns boolean language sql immutable as $$
@@ -92,6 +90,50 @@ begin
     on conflict(col,id) do nothing;
   return exists(select 1 from locks where col=p_col and id=p_id and holder=p_holder);
 end $$;
+
+-- 6b) Primeiro acesso: ativa o convite do email da sessão. Quem chama só pode ativar o seu próprio convite.
+create or replace function public.ativar_convite() returns jsonb
+language plpgsql security definer set search_path=public as $$
+declare
+  e text := lower(auth.jwt()->>'email');
+  u text := auth.uid()::text;
+  c record; g text; pf text; atual jsonb; agora text; acao text;
+begin
+  if e is null or u is null then return null; end if;
+  select d.id, d.data into c from docs d
+   where d.col='convites' and lower(d.data->>'email')=e and coalesce((d.data->>'ativo')::boolean,true) and coalesce(d.data->>'usadoPor','')=''
+   order by d.updated_at limit 1 for update;
+  if not found then return null; end if;
+  pf := c.data->>'perfil';
+  agora := to_char(now() at time zone 'utc','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  acao := 'Primeiro acesso com o utilizador criado (' || case pf when 'admin' then 'Administrador' when 'logistica' then 'Gestor de logística' when 'consulta' then 'Consulta e análise' else pf end || ')';
+  select d.data into atual from docs d where d.col='utilizadores' and d.id=u for update;
+  if atual is null then
+    insert into docs(col,id,data,updated_by) values('utilizadores',u,jsonb_build_object(
+      'perfil',pf,'alcunha',c.data->>'nome','email',c.data->>'email','ativo',true,'criadoEm',agora,
+      'criadoPor',coalesce(c.data->>'criadoPor',u),'historico',jsonb_build_array(jsonb_build_object('em',agora,'por',u,'acao',acao))),auth.uid());
+  elsif pf='admin' then
+    -- quem já está registado só muda de perfil por um convite de administrador; os outros convites nunca lhe baixam o perfil
+    update docs set data = data || jsonb_build_object('perfil','admin','ativo',true,'email',c.data->>'email',
+      'historico',coalesce(data->'historico','[]'::jsonb) || jsonb_build_array(jsonb_build_object('em',agora,'por',u,'acao',acao))),
+      version=version+1, updated_at=now(), updated_by=auth.uid() where col='utilizadores' and id=u;
+  end if;
+  update docs set data = data || jsonb_build_object('usadoPor',u,'usadoEm',agora), version=version+1, updated_at=now(), updated_by=auth.uid()
+   where col='convites' and id=c.id;
+  update docs set data = data || jsonb_build_object('estado','aprovado'), version=version+1, updated_at=now(), updated_by=auth.uid()
+   where col='acessos' and id=u;
+  -- ligar a ficha de gestor responsável e os pedidos que lhe estavam atribuídos
+  select d.id into g from docs d where d.col='gestores' and coalesce(d.data->>'utilizadorId','')=''
+     and (d.data->>'conviteId'=c.id or lower(d.data->>'email')=e or lower(trim(d.data->>'nome'))=lower(trim(c.data->>'nome')))
+   order by (d.data->>'conviteId'=c.id) desc nulls last limit 1;
+  if g is not null then
+    update docs set data = data || jsonb_build_object('utilizadorId',u), version=version+1, updated_at=now(), updated_by=auth.uid() where col='gestores' and id=g;
+    update docs set data = data || jsonb_build_object('logisticaId',u), version=version+1, updated_at=now(), updated_by=auth.uid() where col='pedidos' and data->>'logisticaId'='g:'||g;
+  end if;
+  return jsonb_build_object('perfil',pf);
+end $$;
+revoke all on function public.ativar_convite() from public, anon;
+grant execute on function public.ativar_convite() to authenticated;
 
 -- 7) Só se regista (cria palavra-passe) quem tem o email em Utilizadores
 create or replace function public.bloquear_registo() returns trigger

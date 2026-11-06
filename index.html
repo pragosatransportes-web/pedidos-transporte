@@ -2341,19 +2341,10 @@ document.addEventListener("contextmenu",e=>{const t=e.target.closest("[data-del]
 document.addEventListener("click",e=>{if(ctxEl&&!e.target.closest(".ctx"))hideCtx();},true);
 window.addEventListener("scroll",hideCtx,{passive:true});
 let _cvDone=new Set();
-async function syncConvites(){if(!db||!S.me.id||!COLS.every(c=>S.loaded[c]))return;if(!M.user)buildMaps();
-  /* Convite de administrador: só o próprio o ativa, depois de o servidor validar o email da sessão (eu_admin) */
-  const emMeu=normEmail(S.me.email||"");const cvAdm=S.me.isOwner&&emMeu?S.d.convites.find(x=>x.perfil==="admin"&&x.ativo!==false&&!x.usadoPor&&normEmail(x.email)===emMeu):null;
-  if(cvAdm&&!_cvDone.has("adm")){_cvDone.add("adm");const u0=M.user[S.me.id];
-    try{await db.doc("utilizadores/"+S.me.id).set({...(u0||{}),id:undefined,perfil:"admin",alcunha:u0?.alcunha||cvAdm.nome,email:cvAdm.email,ativo:true,criadoEm:u0?.criadoEm||nowISO(),criadoPor:u0?.criadoPor||cvAdm.criadoPor||S.me.id,historico:[...(u0?.historico||[]),{em:nowISO(),por:S.me.id,acao:`Primeiro acesso com o utilizador criado (${ROLE_LABEL.admin})`}]});
-      await db.doc("convites/"+cvAdm.id).update({usadoPor:S.me.id,usadoEm:nowISO()});}catch(e){console.warn(e);}}
-  const c=conviteMeu();if(c&&c.perfil!=="admin"&&!M.user[S.me.id]&&!S.me.isOwner&&!_cvDone.has("me")){const a=S.d.acessos.find(x=>x.id===S.me.id);if(!a||a.conviteId!==c.id){_cvDone.add("me");db.doc("acessos/"+S.me.id).set({perfil:c.perfil,conviteId:c.id,nota:"Utilizador criado pelo administrador",em:nowISO(),estado:"convite"}).catch(()=>{});}}
-  if(realRole()!=="admin")return;
-  for(const a of S.d.acessos){if(a.estado!=="convite"||M.user[a.id]||_cvDone.has(a.id))continue;const cv=M.conv[a.conviteId];if(!cv||cv.perfil==="admin"||cv.ativo===false||(cv.usadoPor&&cv.usadoPor!==a.id))continue;_cvDone.add(a.id);
-    try{await db.doc("utilizadores/"+a.id).set({perfil:cv.perfil,alcunha:cv.nome,email:cv.email,ativo:true,criadoEm:nowISO(),criadoPor:cv.criadoPor||S.me.id,historico:[{em:nowISO(),por:S.me.id,acao:`Primeiro acesso com o utilizador criado (${ROLE_LABEL[cv.perfil]})`}]});
-      await db.doc("convites/"+cv.id).update({usadoPor:a.id,usadoEm:nowISO()});await db.doc("acessos/"+a.id).update({estado:"aprovado"});
-      const g=S.d.gestores.find(x=>!x.utilizadorId&&((cv.email&&x.email&&normNome(x.email)===normNome(cv.email))||normNome(x.nome)===normNome(cv.nome)));
-      if(g){await db.doc("gestores/"+g.id).update({utilizadorId:a.id});for(const p of S.d.pedidos.filter(p=>p.logisticaId==="g:"+g.id))await db.doc("pedidos/"+p.id).update({logisticaId:a.id}).catch(()=>{});}}catch(e){console.warn(e);}}}
+/* Primeiro acesso: o próprio ativa o seu convite e o servidor valida-o pelo email da sessão (ativar_convite) */
+async function syncConvites(){if(!db||!S.me.id||!COLS.every(c=>S.loaded[c]))return;
+  const em=normEmail(S.me.email||"");if(_cvDone.has("me")||!em||!S.d.convites.some(c=>c.ativo!==false&&!c.usadoPor&&normEmail(c.email)===em))return;_cvDone.add("me");
+  try{const {data,error}=await window.CPSA_SB.rpc("ativar_convite");if(error)throw error;if(data&&data.perfil==="admin"){S.me.isOwner=true;S.me.canEdit=true;render();}}catch(e){console.warn(e);}}
 /* ========== clientes de cisternas: matriz cliente × produto ========== */
 function parseMatrizClientes(rows){const txt=v=>v==null?"":String(v).replace(/\u00a0/g," ").trim();
   const hi=rows.findIndex(r=>r&&r.slice(1).filter(v=>txt(v)).length>=2);if(hi<0)return null;
