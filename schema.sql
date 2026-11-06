@@ -42,7 +42,9 @@ language sql stable security definer set search_path=public as $$ select public.
 create or replace function public.eu_admin() returns boolean
 language sql stable security definer set search_path=public as $$
   select exists(select 1 from app_admins a where lower(a.email)=lower(auth.jwt()->>'email'))
-      or exists(select 1 from docs d where d.col='utilizadores' and d.id=auth.uid()::text and d.data->>'perfil'='admin' and coalesce((d.data->>'ativo')::boolean,true)) $$;
+      or exists(select 1 from docs d where d.col='utilizadores' and d.id=auth.uid()::text and d.data->>'perfil'='admin' and coalesce((d.data->>'ativo')::boolean,true))
+      -- convite de administrador ainda por usar, validado pelo email da sessão; depois de usado deixa de contar
+      or exists(select 1 from docs d where d.col='convites' and lower(d.data->>'email')=lower(auth.jwt()->>'email') and d.data->>'perfil'='admin' and coalesce((d.data->>'ativo')::boolean,true) and coalesce(d.data->>'usadoPor','')='') $$;
 
 -- coleções que só o administrador altera
 create or replace function public.col_admin(c text) returns boolean language sql immutable as $$
