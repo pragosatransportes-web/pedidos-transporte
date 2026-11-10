@@ -1392,7 +1392,8 @@ function planoData(opt={}){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
   const ext=doDia.filter(p=>origem(p)==="externa");
   const refDia=p=>p.periodoInicio||p.pretendidaEm;
   const porAtribuir=doDia.filter(p=>!(origem(p)==="propria"&&p.recurso?.viaturaId)&&origem(p)!=="externa")
-    .concat(ps.filter(p=>["Pendente de aprovação","Aprovado","Por agendar"].includes(p.estado)&&refDia(p)&&dayKey(refDia(p))===dia));
+    /* Pedidos ainda por agendar só aparecem no painel lateral; a exportação do plano pode pedi-los (comPendentes) */
+    .concat(opt.comPendentes?ps.filter(p=>["Pendente de aprovação","Aprovado","Por agendar"].includes(p.estado)&&refDia(p)&&dayKey(refDia(p))===dia):[]);
   const cand=scope().filter(p=>["Aprovado","Por agendar"].includes(p.estado)).concat(porAtribuir.filter(p=>p.estado==="Agendado")).sort((a,b)=>String(refDia(a)).localeCompare(String(refDia(b))));
   const restr=f.obra||f.tipo||f.cat;const G=f.gestor&&M.gest[f.gestor];
   let vs=unidadesPlano();if(f.viatura)vs=vs.filter(v=>v.id===f.viatura);if(G)vs=vs.filter(v=>gestorCobreViatura(G,v)||porVia.has(v.id));if(f.empresa)vs=vs.filter(v=>vEmpresa(v)===f.empresa);if(f.zona)vs=vs.filter(v=>vZona(v)===f.zona||porVia.has(v.id));
@@ -1424,7 +1425,7 @@ function planoHtml(){const d=planoData();const vista=S.planoVista||window.__plan
    <div class="row"><span class="sum">${d.n} transporte(s) · ${comC} de ${tot} viaturas com cargas${d.porAtribuir.length?` · ${d.porAtribuir.length} por atribuir`:""}</span><button class="btn sm" data-act="expPlano" data-a="pdf">Exportar PDF</button><button class="btn sm" data-act="expPlano" data-a="xlsx">Exportar Excel</button><div class="seg" role="group" aria-label="Vista do plano"><button class="${vista==="cards"?"on":""}" data-act="planoVista" data-a="cards" aria-pressed="${vista==="cards"}">Cartões</button><button class="${vista==="lista"?"on":""}" data-act="planoVista" data-a="lista" aria-pressed="${vista==="lista"}">Lista</button><button class="${vista==="ocup"?"on":""}" data-act="planoVista" data-a="ocup" aria-pressed="${vista==="ocup"}">Ocupação</button></div></div></div>
   ${vista==="ocup"?ocupacaoHtml(d):vista==="lista"?planoLista(d,tot):`
   ${!tot&&!d.ext.length&&!d.porAtribuir.length?`<div class="empty">${unidadesPlano().length?"Nenhuma viatura ou transporte corresponde aos filtros neste dia.":"Ainda não há viaturas na frota própria. Importe as listas de viaturas em Frota própria."}</div>`:""}
-  ${(d.porAtribuir.length||d.ext.length)?`<div class="pc-grid">${d.porAtribuir.length?planoCard({id:"_pa"},d.porAtribuir,d,{titulo:"Por atribuir",sub:"Pedidos do dia sem viatura própria nem transportadora",cls:"pa",sem:true}):""}${d.ext.length?planoCard({id:"_ex"},d.ext,d,{titulo:"Veículos externos",sub:[...new Set(d.ext.map(p=>M.tr[p.recurso?.transportadoraId]?.nome).filter(Boolean))].join(" · "),cls:"ex",sem:true}):""}</div>`:""}
+  ${(d.porAtribuir.length||d.ext.length)?`<div class="pc-grid">${d.porAtribuir.length?planoCard({id:"_pa"},d.porAtribuir,d,{titulo:"Por atribuir",sub:"Transportes agendados para o dia sem viatura própria nem transportadora",cls:"pa",sem:true}):""}${d.ext.length?planoCard({id:"_ex"},d.ext,d,{titulo:"Veículos externos",sub:[...new Set(d.ext.map(p=>M.tr[p.recurso?.transportadoraId]?.nome).filter(Boolean))].join(" · "),cls:"ex",sem:true}):""}</div>`:""}
   ${d.grupos.map(g=>`<h3 class="pc-g">${esc(g.nome)} <span class="muted">(${g.cards.length})</span></h3><div class="pc-grid">${g.cards.map(c=>planoCard(c.v,c.peds,d)).join("")}</div>`).join("")}`}`;}
 /* Vista Dia: todas as viaturas da frota própria agrupadas pelo gestor responsável, com os transportes do dia */
 function diaHtml(){const d=planoData({todas:true}),f=S.f.ag;
@@ -1456,7 +1457,7 @@ function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return 
   const todos=d.grupos.flatMap(g=>g.cards.map(c=>c.v.id));const algum=todos.some(id=>S.plExp[id]);
   return `<div class="row" style="justify-content:flex-end;margin:-4px 0 6px"><button class="btn sm ghost" data-act="plExpAll" data-a="${algum?"0":"1"}">${algum?"Recolher todas":"Expandir todas"}</button></div><div class="tw"><table class="plano-lista"><thead>${head}</thead><tbody>${b}</tbody></table></div>`;}
 const EXP_EST=[["pa","Por agendar",["Pendente de aprovação","Aprovado","Por agendar"]],["ag","Agendado",["Agendado"]],["ex","Em execução",["Em execução"]],["co","Concluído",["Concluído"]]];
-function expPlanoCards(dia,est){const f=S.f.ag,keep=f.data;f.data=dia;let d;try{d=planoData();}finally{f.data=keep;}const ok=p=>est.includes(p.estado);
+function expPlanoCards(dia,est){const f=S.f.ag,keep=f.data;f.data=dia;let d;try{d=planoData({comPendentes:true});}finally{f.data=keep;}const ok=p=>est.includes(p.estado);
   const cards=[];const pa=d.porAtribuir.filter(ok),ex=d.ext.filter(ok);if(pa.length)cards.push({t1:"POR ATRIBUIR",t2:"Pedidos sem viatura",peds:pa});if(ex.length)cards.push({t1:"VEÍCULOS EXTERNOS",t2:"",peds:ex});
   d.grupos.forEach(g=>g.cards.forEach(c=>{const v=c.v;cards.push({t1:`${v.matricula||v.ident}${v.virtual?" "+v.pm.id:""}   ${vTag(v)}`,t2:`${vReboques(v)||"—"}  -  ${(v.virtual?v.pm.mot:v.motorista)||"sem motorista"}`,peds:c.peds.filter(ok),v});}));
   return{dia,cards};}
