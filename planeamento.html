@@ -124,14 +124,8 @@
   <div id="simQuick">
   <div class="grid g2">
     <div class="card">
-      <h2>1 · Rota</h2>
-      <div class="grid g2">
-        <div><label>Origem</label><input id="origem" list="origens" placeholder="Escreva p/ procurar (ex.: Tojal)"></div>
-        <div><label>Destino</label><input id="destino" list="origens" placeholder="Escreva p/ procurar (obra/pedreira/cliente)"></div>
-      </div>
-      <p class="small muted" style="margin:2px 2px 0">💡 Escolha um local guardado na lista, ou escreva o nome e carregue em <b>Enter</b> para procurar coordenadas (aproximadas) — ficam guardadas nos Locais. Também pode colar <code>38.98, -8.98</code>.</p>
+      <h2>1 · Equipamentos a transportar</h2>
       <datalist id="origens"></datalist>
-      <h3 style="margin-top:18px">Equipamentos a transportar</h3>
       <label>Tipo de equipamento</label>
       <div class="flex" style="gap:6px">
         <select id="eqClassFilter" style="flex:1"></select>
@@ -428,12 +422,8 @@
 
 <div class="mv-grid">
 <form id="v_f" autocomplete="off">
-  <div class="mv-box"><b>Rota</b>
-    <div class="mv-row">
-      <label>Origem<input type="text" id="v_origem" list="origens" value="Batalha"></label>
-      <label>Destino<input type="text" id="v_destino" list="origens" value="Sines"></label>
-    </div>
-    <p class="mv-hint" id="v_kmHint">Escolha locais da lista para estimar os km pelos Locais da Smart Logistics, ou escreva os km.</p>
+  <div class="mv-box"><b>Viagem</b>
+    <p class="mv-hint" id="v_kmHint">Indique os km de ida e de volta.</p>
     <div class="mv-row">
       <label>Km ida<input type="number" id="v_kmIda" min="1" step="1" value="230"></label>
       <label>Km volta<input type="number" id="v_kmVolta" min="0" step="1" value="230"></label>
@@ -899,7 +889,9 @@ function renderLocEq(){ if(!document.getElementById('locEqTable'))return;
     <td><button class="ghost btn mini" onclick="useEqOrigin('${e.num}')">↳ origem</button></td></tr>`;}).join('');
 }
 function setEqLoc(n,v){ if(!v){delete ST.eqLoc[n];} else {ST.eqLoc[n]={loc:v,ts:(ST.eqLoc[n]&&ST.eqLoc[n].ts)||new Date().toISOString().slice(0,16),src:'manual'};} save(); }
-function useEqOrigin(n){const L=ST.eqLoc[n];document.getElementById('origem').value=L?L.loc:'';document.getElementById('origem').scrollIntoView({block:'center'});}
+/* Origem e Destino saíram da Consulta rápida: quem os lê recebe vazio */
+function rotaVal(id){const el=document.getElementById(id);return el?el.value:'';}
+function useEqOrigin(n){const el=document.getElementById('origem');if(!el)return;const L=ST.eqLoc[n];el.value=L?L.loc:'';el.scrollIntoView({block:'center'});}
 {const _ls=document.getElementById('locSearch'); if(_ls)_ls.oninput=renderLocEq;}
 
 /* ---- lista de equipamentos filtrada por tipo (seleção múltipla) ---- */
@@ -1110,7 +1102,7 @@ function runEngine(){
       ➡ Alternativas: use o modo <b>«Combinação otimizada»</b> (divide no mínimo de viagens), <b>«Uma viagem por equipamento»</b>, ou reveja a seleção. Ajuste a folga entre máquinas em <b>Parâmetros</b> se necessário.
     </div>`;
   }
-  if(best.fits){LAST_RESULT={viagens:[{pm:best.pm.id,eqNums:[...SEL],orig:document.getElementById('origem').value,dest:document.getElementById('destino').value,data:new Date().toISOString().slice(0,10),mot:best.pm.mot}]};html+=saveBtnHTML();}else{LAST_RESULT=null;}
+  if(best.fits){LAST_RESULT={viagens:[{pm:best.pm.id,eqNums:[...SEL],orig:rotaVal('origem'),dest:rotaVal('destino'),data:new Date().toISOString().slice(0,10),mot:best.pm.mot}]};html+=saveBtnHTML();}else{LAST_RESULT=null;}
   html+=`</div>`;
 
   // alternatives
@@ -1151,7 +1143,7 @@ function runEngine(){
 }
 function runSplit(){
   let rowsHtml='', pmUse={}, anyExcede=false, worst='normal', vg=[];
-  const origV=document.getElementById('origem').value, destV=document.getElementById('destino').value, hoje=new Date().toISOString().slice(0,10);
+  const origV=rotaVal('origem'), destV=rotaVal('destino'), hoje=new Date().toISOString().slice(0,10);
   const order={normal:0,especial:1,excecional:2};
   SEL.forEach(n=>{
     const e=byNum(n); const L=combinedLoad([n]); const best=rankPM(L).list[0]; const cls=classify(L);
@@ -1233,14 +1225,14 @@ function runOptimized(){
     <div class="note">Junta as máquinas no mínimo de viagens respeitando <b>peso ≤ capacidade</b> e <b>comprimento real ≤ estrado</b> (soma dos comprimentos + folga de ${ST.loadGap} m entre cada máquina), atribuindo a cada viagem o conjunto mais adequado. Ajusta o «Estrado útil» dos conjuntos e a «Folga entre máquinas» em Parâmetros para maior rigor.</div>
     ${saveBtnHTML()}
   </div>`;
-  LAST_RESULT={viagens:trips.map(t=>({pm:t.pm?t.pm.id:'',eqNums:t.items.map(i=>i.num),orig:document.getElementById('origem').value,dest:document.getElementById('destino').value,data:new Date().toISOString().slice(0,10),mot:t.pm?t.pm.mot:''}))};
+  LAST_RESULT={viagens:trips.map(t=>({pm:t.pm?t.pm.id:'',eqNums:t.items.map(i=>i.num),orig:rotaVal('origem'),dest:rotaVal('destino'),data:new Date().toISOString().slice(0,10),mot:t.pm?t.pm.mot:''}))};
   document.getElementById('results').innerHTML=html;
 }
 function goEditSpec(n){document.querySelector('[data-tab="cat"]').click();showSub('lista');setTimeout(()=>{document.getElementById('catSearch').value=n;renderCat();},50);}
 document.getElementById('btnRun').onclick=runEngine;
 document.getElementById('btnToPedidos').onclick=()=>{
   if(!SEL.length){alert('Selecione equipamentos primeiro.');return;}
-  const orig=document.getElementById('origem').value, dest=document.getElementById('destino').value;
+  const orig=rotaVal('origem'), dest=rotaVal('destino');
   const n=SEL.length;
   SEL.forEach(num=>{const e=byNum(num);ST.req.push({tipo:e.classe,num,orig,dest,disp:'',entregar:'',obs:'',src:'manual'});});
   save(); SEL=[]; renderSel(); renderMselList();
@@ -2048,7 +2040,7 @@ initClasses();renderSel();renderMselList();renderLocEq();renderGrpQuick();render
 /* ================= TEMPO DE VIAGENS ================= */
 (function(){
 const $=id=>document.getElementById("v_"+id);
-const IDS=["origem","destino","kmIda","kmVolta","reg","hor","inicio","carga","descarga","vel","fixo","cont0","dia0","amp0","dias0","sem0","ant0","ext0","red0"];
+const IDS=["kmIda","kmVolta","reg","hor","inicio","carga","descarga","vel","fixo","cont0","dia0","amp0","dias0","sem0","ant0","ext0","red0"];
 function defStart(){ const d=new Date(); d.setDate(d.getDate()+1);
   const p=x=>String(x).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T06:00`; }
 const DEF={}; IDS.forEach(k=>DEF[k]=$(k).value); DEF.inicio=defStart();
@@ -2065,27 +2057,12 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 const plural=(n,a,b)=>`${n} ${n===1?a:b}`;
 const COL={conducao:["var(--drive)","Condução"],trabalho:["var(--work)","Outro trabalho"],pausa:["var(--pause)","Pausa"],repouso:["var(--rest)","Repouso"]};
 
-/* km pelos Locais da Smart Logistics (linha reta × fator rodoviário) */
-function autoKm(){
-  if(typeof kmBetween!=="function") return;
-  const o=$("origem").value.trim(), d=$("destino").value.trim();
-  if(!o||!d) return;
-  let a=null,b=null; try{ a=kmBetween(o,d); b=kmBetween(d,o); }catch(_){}
-  const hint=$("kmHint");
-  if(a!=null){
-    $("kmIda").value=a; $("kmVolta").value=b!=null?b:a;
-    hint.innerHTML=`Km estimados pelos Locais: linha reta × ${typeof ST!=="undefined"&&ST.roadFactor?String(ST.roadFactor).replace(".",","):""} (Parâmetros › Locais). Pode corrigir à mão.`;
-  } else {
-    hint.textContent="Um dos locais não tem coordenadas nos Locais da Smart Logistics. Escreva os km, ou adicione o local em Transporte de Máquinas › Parâmetros › Locais.";
-  }
-}
-
 function read(){
   const n=k=>{ const v=$(k).valueAsNumber; return Number.isFinite(v)?v:0; };
   const m=k=>Math.round(n(k)*60);
   const vel=Math.max(20,n("vel")||80), reg=$("reg").value, regresso=reg!=="nao", retCarregado=reg==="carregado";
   const kmIda=Math.max(1,n("kmIda"));
-  return {origem:$("origem").value.trim()||"Origem", destino:$("destino").value.trim()||"Destino", vel,
+  return {origem:"Origem", destino:"Destino", vel,
     kmIda, kmVolta:n("kmVolta"), regresso, retCarregado,
     dIda:Math.max(1,Math.round(kmIda/vel*60)), dVolta:regresso?Math.round(n("kmVolta")/vel*60):0,
     carga:m("carga"), descarga:m("descarga"), fixo:m("fixo"),
@@ -2110,7 +2087,7 @@ function render(){
   const horLabel = horV==="w" ? `na semana (${plural(h.dias,"dia","dias")} de serviço até ao repouso semanal)` : (horV==="1"?"num dia de serviço":`em ${horV} dias de serviço`);
 
   const isEx=IDS.every(k=>k==="inicio"||$(k).value===DEF[k]);
-  $("tit").innerHTML=`${esc(p.origem)} → ${esc(p.destino)}${p.regresso?` → ${esc(p.origem)} (${retTxt})`:""} · ${p.kmIda+(p.regresso?p.kmVolta:0)} km por viagem`+(isEx?'<span class="mv-ex">exemplo</span>':"");
+  $("tit").innerHTML=`${p.regresso?`Ida e volta (regresso ${retTxt})`:"Só ida"} · ${p.kmIda+(p.regresso?p.kmVolta:0)} km por viagem`+(isEx?'<span class="mv-ex">exemplo</span>':"");
 
   $("big").textContent=h.viagens;
   let txt;
@@ -2188,7 +2165,6 @@ load(DEF);
 try{ const o=JSON.parse(localStorage.getItem(LSK)||"null"); if(o){ load(o); if(o.choice) choice=o.choice; } }catch(_){}
 $("f").addEventListener("input",()=>{ choice="auto"; render(); });
 $("f").addEventListener("submit",e=>e.preventDefault());
-["origem","destino"].forEach(k=>$(k).addEventListener("change",()=>{ autoKm(); render(); }));
 $("reset").addEventListener("click",()=>{ load(DEF); choice="auto"; render(); });
 $("plans").addEventListener("click",e=>{ const b=e.target.closest("[data-p]"); if(!b) return; choice=b.dataset.p; render(); });
 window.mvRender=render;
@@ -2207,7 +2183,6 @@ render();
     try{localStorage.setItem('cpsa_plan_mod',m);}catch(_){}
   }
   sw.forEach(b=>b.addEventListener('click',()=>show(b.dataset.mod)));
-  ['v_origem','v_destino'].forEach(id=>{const el=document.getElementById(id); if(el&&typeof attachLocAutocomplete==='function') attachLocAutocomplete(el);});
   let m='maq'; try{ m=localStorage.getItem('cpsa_plan_mod')||'maq'; }catch(_){}
   show(location.hash==='#viagens'?'viagens':m);
 })();
