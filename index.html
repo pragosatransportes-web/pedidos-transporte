@@ -145,7 +145,7 @@ tr:last-child td{border-bottom:0}
 .c-ext{color:var(--ext);border-color:color-mix(in srgb,var(--ext) 50%,transparent);background:color-mix(in srgb,var(--ext) 8%,transparent)}
 .c-comb{color:var(--comb);border-color:color-mix(in srgb,var(--comb) 55%,transparent);background:color-mix(in srgb,var(--comb) 12%,transparent);font-weight:600}
 .ev.comb{border-left:4px solid var(--comb)}.ag-it.comb,.panel.comb{box-shadow:inset 4px 0 0 var(--comb)}.pc-i.comb{box-shadow:inset 3px 0 0 var(--comb);padding-left:6px}
-.xline.comb{border-left:3px solid var(--comb)}.note.comb-note{border-left:4px solid var(--comb)}.comb-sec>header .k{background:var(--comb);color:#fff}
+.xline.comb{border-left:3px solid var(--comb)}.pt-h{font-weight:600;font-size:12.5px;color:var(--comb);margin-top:4px}.note.comb-note{border-left:4px solid var(--comb)}.comb-sec>header .k{background:var(--comb);color:#fff}
 .pn{font-family:var(--f-mono);font-size:12px;padding:1px 6px;border:1px solid var(--line);border-radius:4px;background:var(--panel2);white-space:nowrap}
 .plate{font-family:var(--f-mono);font-size:12px;padding:0 6px;border:1px solid var(--ink);border-radius:3px;letter-spacing:.06em;white-space:nowrap}
 
@@ -1117,7 +1117,7 @@ function vNovo(){if(!can.pedido())return denied();if(!S.form)S.form=novoForm();c
    <div class="fld"><span>Número</span><div class="pn" style="align-self:flex-start">${esc(ed?.numero||"Atribuído ao guardar")}</div></div>
    <div class="fld"><span>Criado</span><div class="num">${ed?`${fmtDT(ed.criadoEm)} · ${esc(nome(ed.criadoPor))}`:"Automático"}</div></div>
    <div class="fld"><span>Estado</span><div>${chipE(ed?.estado||"Rascunho")}</div></div></div></section>`;
-  return head+tipos+ident+secTipo(F)+(NOVO_LAY.includes(F.tipo)?secCargaLoc(F,4)+secDescLoc(F,5)+secComb(F):secLocais(F))+secObs(F)+(F.err?`<div class="note bad">${esc(F.err)}</div>`:"")+
+  return head+tipos+ident+secTipo(F)+(NOVO_LAY.includes(F.tipo)?(F.tipo==="armazem"?secCargaLoc(F,4)+secMat(F,5)+secDescLoc(F,6):secCargaLoc(F,4)+secDescLoc(F,5))+secComb(F):secLocais(F))+secObs(F)+(F.err?`<div class="note bad">${esc(F.err)}</div>`:"")+
    (editaSemSubmeter(ed)?`<div class="row" style="justify-content:flex-end;align-items:center"><small class="muted" style="max-width:52ch">O pedido mantém o estado “${esc(ed.estado)}”${ed.recurso&&(ed.recurso.viaturaId||ed.recurso.transportadoraId)?" e o agendamento":""}. As alterações ficam registadas no histórico.</small><button class="btn bad" data-act="anularForm">Cancelar edição</button><button class="btn pri" data-act="guardarPed" data-a="e">Guardar alterações</button></div>`:
    `<div class="row" style="justify-content:flex-end;align-items:center">${fld("form.paraAprovacao","Para aprovação",{type:"check"})}<small class="muted" style="max-width:48ch">${F.paraAprovacao?"O pedido fica em Aprovações até a Logística o aprovar.":"Sem esta opção, o pedido entra logo na lista de pedidos, por agendar."}</small><button class="btn bad" data-act="anularForm">${F.id?"Cancelar edição":"Anular pedido"}</button><button class="btn" data-act="guardarPed" data-a="0">Guardar rascunho</button><button class="btn pri" data-act="guardarPed" data-a="1">${F.paraAprovacao?"Submeter para aprovação":"Submeter pedido"}</button></div>`);}
 function secCarga(){const mats=S.d.materiais.filter(m=>m.ativo!==false);
@@ -1143,12 +1143,22 @@ function secDescLoc(F,n){const o=F.obraDesc;
    ${fld("form.tDescarga","Tempo de descarga (min)",{type:"number",min:0,rc:true})}${dtFlds("pretendidaEm",{armazem:"Entregar em",fornecedor:"Entregar em",recolha:"Recolher em"}[F.tipo]||"Data",true)}
    ${rotaHtml(F,{semTempos:true})}</div></section><datalist id="dl_hist">${[...new Set(S.d.pedidos.flatMap(p=>[p.localCarga,p.localDescarga]).map(x=>String(x||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt")).slice(0,800).map(x=>`<option value="${esc(x)}">`).join("")}</datalist>`;}
 const COMB_T=["armazem","fornecedor"];
+function boxFld(p){const bx=CFG().boxes||[];return bx.length?fld(p,"Box de carga",{type:"select",req:true,opts:[["","Selecione"]].concat(bx.map(b=>[b,b]))}):fld(p,"Box de carga",{req:true,ph:"Ex.: Box 3"});}
+function matFlds(p){return `${boxFld(p+".box")}${fld(p+".cDesc","Descrição da carga",{req:true,cls:"full",ph:"Ex.: 12 lancis pré-fabricados, 2 paletes de cimento"})}
+   ${fld(p+".cVol","Nº de paletes",{type:"number",min:0})}${fld(p+".cC","Comprimento (m)",{type:"number",step:"any",min:0})}${fld(p+".cL","Largura (m)",{type:"number",step:"any",min:0})}${fld(p+".cA","Altura (m)",{type:"number",step:"any",min:0})}${fld(p+".cPeso","Peso (t)",{type:"number",step:"any",min:0})}`;}
+function secMat(F,n){return `<section class="form-sec"><header><span class="k">${n}</span><h3>Material de carga</h3></header><div>${matFlds("form")}</div></section>`;}
+function locPonto(p,L,q){const k=q==="c"?"obraCarga":"obraDesc",kl=q==="c"?"localCarga":"localDescarga",kc=q==="c"?"coordCarga":"coordDescarga";const o=M.obra[L[k]];
+  return `${fld(p+"."+k,q==="c"?"Obra de carga":"Obra de descarga",{type:"select",req:true,opts:optObraLoc()})}${L[k]==="__outro"?fld(p+"."+kl,q==="c"?"Local de carga":"Local de descarga",{req:true,list:"dl_hist"})+fld(p+"."+kc,"Coordenadas",{ph:"Opcional · ex.: 39.618, -8.837"}):`<div class="fld"><span>Local</span><div>${esc(o?o.codigo+" · "+o.nome:"—")}<br><small class="muted">${esc(o?obraCoordTxt(o)||"sem coordenadas":"")}</small></div></div>`}`;}
+function pontoHtml(L,i){const p=`form.cExtra.${i}`;
+  return `<div class="xline comb"><div class="xh"><b>Ponto ${i+2}</b><button type="button" class="btn sm ghost" data-act="cRem" data-a="${i}" aria-label="Remover ponto">× Remover</button></div><div class="xg">
+   <div class="full pt-h">1 · Local de carga</div>${locPonto(p,L,"c")}<div class="full pt-h">2 · Material de carga</div>${matFlds(p)}<div class="full pt-h">3 · Local de descarga</div>${locPonto(p,L,"d")}</div></div>`;}
+function pontoCarga(L){const o=M.obra[L.obraCarga];return {obraCarga:L.obraCarga,localCarga:o?`${o.codigo} · ${o.nome}`:String(L.localCarga||"").trim(),coordCarga:o?obraCoordTxt(o):String(L.coordCarga||"").trim(),box:L.box};}
 function secComb(F){if(!COMB_T.includes(F.tipo)||F.id)return "";const xs=F.cExtra||[];
-  return `<section class="form-sec comb-sec"><header><span class="k">⇄</span><h3>Carga combinada <small class="muted">(opcional)</small></h3></header><div>
-   <p class="muted full" style="margin:0">Mesmo local de carga e mesma viatura, com descarga em mais obras. Fica um pedido por obra, ligados como uma só carga e agendados em conjunto. A ordem das obras é a ordem de descarga.</p>
+  return `<section class="form-sec comb-sec"><header><span class="k">${F.tipo==="armazem"?7:"⇄"}</span><h3>${F.tipo==="armazem"?"⇄ ":""}Carga combinada <small class="muted">(opcional)</small></h3></header><div>
+   <p class="muted full" style="margin:0">${F.tipo==="armazem"?"Mais pontos na mesma viagem: para cada um indique o local de carga, o material e o local de descarga. Fica um pedido por ponto, ligados como uma só carga e agendados em conjunto, com a mesma viatura.":"Mesmo local de carga e mesma viatura, com descarga em mais obras. Fica um pedido por obra, ligados como uma só carga e agendados em conjunto. A ordem das obras é a ordem de descarga."}</p>
    ${xs.length?`<div class="full xlines">${xs.map((L,i)=>combLinhaHtml(L,i)).join("")}</div>`:""}
-   <div class="full"><button type="button" class="btn" data-act="cAdd">+ Adicionar obra de destino</button></div></div></section>`;}
-function combLinhaHtml(L,i){const p=`form.cExtra.${i}`;const o=M.obra[L.obraDesc];const mats=S.d.materiais.filter(m=>m.ativo!==false);
+   <div class="full"><button type="button" class="btn" data-act="cAdd">${F.tipo==="armazem"?"+ Adicionar ponto":"+ Adicionar obra de destino"}</button></div></div></section>`;}
+function combLinhaHtml(L,i){if(S.form&&S.form.tipo==="armazem")return pontoHtml(L,i);const p=`form.cExtra.${i}`;const o=M.obra[L.obraDesc];const mats=S.d.materiais.filter(m=>m.ativo!==false);
   return `<div class="xline comb"><div class="xh"><b>Obra de destino ${i+2}</b><button type="button" class="btn sm ghost" data-act="cRem" data-a="${i}" aria-label="Remover obra de destino">× Remover</button></div><div class="xg">
    ${fld(p+".obraDesc","Obra de descarga",{type:"select",req:true,opts:optObraLoc()})}
    ${L.obraDesc==="__outro"?fld(p+".localDescarga","Local de descarga",{req:true,list:"dl_hist"})+fld(p+".coordDescarga","Coordenadas",{ph:"Opcional · ex.: 39.618, -8.837"}):`<div class="fld"><span>Local</span><div>${esc(o?o.codigo+" · "+o.nome:"—")}<br><small class="muted">${esc(o?obraCoordTxt(o)||"sem coordenadas":"")}</small></div></div>`}
@@ -1180,8 +1190,8 @@ function secTipo(F){const t=F.tipo;let body="";
      ${dtFlds("periodoInicio","Data de início",true)}${dtFlds("periodoFim","Data de fim",true,F.periodoInicio&&F.periodoFim?`Duração: ${fmtDur(Date.parse(fromInput(F.periodoFim))-Date.parse(fromInput(F.periodoInicio)))}`:"")}
      ${!F.id?fld("form.vQtd","Nº de viaturas iguais",{type:"number",min:1,hint:"Cria um pedido por viatura."}):""}
      ${!F.id?`<div class="full xlines">${F.vExtra.map((L,i)=>vLinhaHtml(L,i)).join("")}<button type="button" class="btn" data-act="vAdd">+ Adicionar outra viatura</button>${F.vExtra.length?`<small>Ao submeter são criados ${vTotal(F)} pedidos para a mesma obra.</small>`:""}</div>`:""}`;}
-  else if(t==="armazem"){const bx=CFG().boxes||[];
-    body=`${selViatura(false)}${bx.length?fld("form.box","Box de carga",{type:"select",req:true,opts:[["","Selecione"]].concat(bx.map(b=>[b,b]))}):fld("form.box","Box de carga",{req:true,ph:"Ex.: Box 3"})}${secCarga()}${mLinhasHtml(F)}${fld("form.urgente","Urgente (pico)",{type:"check",cls:"full"})}`;}
+  else if(t==="armazem"){
+    body=`${fld("form.categoriaId","Tipo de viatura",{type:"select",req:true,opts:[["","Selecione"]].concat(cats().map(c=>[c.id,c.nome])),hint:"A viatura concreta é escolhida pela Logística ao agendar."})}${fld("form.urgente","Urgente (pico)",{type:"check",cls:"full"})}`;}
   else if(t==="fornecedor"){const fs=S.d.fornecedores.filter(f=>f.ativo!==false).sort((a,b)=>a.nome.localeCompare(b.nome,"pt"));
     body=`${selViatura(false)}${fs.length?fld("form.fornecedorId","Fornecedor",{type:"select",req:true,opts:[["","Selecione"]].concat(fs.map(f=>[f.id,f.nome])).concat([["__outro","Outro fornecedor (escrever o nome)"]])}):""}
      ${!fs.length||F.fornecedorId==="__outro"?fld("form.fornecedorNome","Nome do fornecedor",{req:true}):""}${secCarga()}${mLinhasHtml(F)}${fld("form.urgente","Urgente (pico)",{type:"check",cls:"full"})}`;}
@@ -1196,7 +1206,7 @@ function secTipo(F){const t=F.tipo;let body="";
      ${fld("form.cPeso","Quantidade total (t)",{type:"number",step:"any",min:0})}${fld("form.nCargas","Nº de cargas",{type:"number",min:1,req:true})}
      ${fld("form.cHoraCarga","Hora de carga",{ph:"Ex.: 07:00"})}${fld("form.cJanela","Hora ou janela de descarga",{ph:"Ex.: 08:00-16:30 ou Manhã"})}`;}
   else if(t==="maquina")body=maqPicker(F)+(F.maqModo==="por"&&!F.id?"":`<div class="full">${analiseHtml(analiseMaq(formAn(F)))}</div>`);
-  return `<section class="form-sec"><header><span class="k">3</span><h3>${NOVO_LAY.includes(t)?"Tipo de viatura e material":esc(TIPO[t].n)}</h3></header><div>${body}</div></section>`;}
+  return `<section class="form-sec"><header><span class="k">3</span><h3>${t==="armazem"?"Tipo de viatura":NOVO_LAY.includes(t)?"Tipo de viatura e material":esc(TIPO[t].n)}</h3></header><div>${body}</div></section>`;}
 function secLocais(F){const t=F.tipo,mq=t==="maquina";
   const L={viatura:[null,"Local de trabalho / apresentação",null],armazem:["Local de carga","Local de entrega","Entregar em"],fornecedor:["Morada de recolha no fornecedor","Local de entrega","Entregar em"],recolha:["Local de recolha","Destino da carga","Recolher em"],maquina:["Origem (onde está a máquina)","Destino","Entregar até"],cisterna:["Local de carga","Local de descarga","Data e hora de descarga"]}[t];
   const k=mq?kmEntre(formAn(F).orig,formAn(F).dest):null;
@@ -1207,7 +1217,7 @@ function secLocais(F){const t=F.tipo,mq=t==="maquina";
    ${L[2]?dtFlds("pretendidaEm",L[2].replace(/ e hora/i,""),true):""}
    ${mq&&F.maqModo!=="por"?fld("form.kmManual","Distância (km)",{type:"number",min:0,rc:true,hint:k!=null?`Estimativa pelos Locais do planeador: ${k} km. Deixe vazio para usar esta.`:"Sem coordenadas para estes locais: indique os km ou registe os locais no planeador."}):""}
    ${rotaHtml(F)}</div></section>${mq?`<datalist id="dl_locais">${PS.locais.map(l=>`<option value="${esc(l.nome)}">`).join("")}</datalist>`:`<datalist id="dl_hist">${[...new Set(S.d.pedidos.flatMap(p=>[p.localCarga,p.localDescarga]).concat(S.d.obras.map(o=>o.nome)).map(x=>String(x||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt")).slice(0,800).map(x=>`<option value="${esc(x)}">`).join("")}</datalist>`}`;}
-function secObs(F){return `<section class="form-sec"><header><span class="k">${NOVO_LAY.includes(F.tipo)?6:5}</span><h3>Instruções e anexos</h3></header><div>
+function secObs(F){return `<section class="form-sec"><header><span class="k">${F.tipo==="armazem"?8:NOVO_LAY.includes(F.tipo)?6:5}</span><h3>Instruções e anexos</h3></header><div>
   ${fld("form.instrucoes",F.tipo==="cisterna"?"Observações":"Instruções de carga e descarga",{type:"textarea",cls:"full",ph:F.tipo==="cisterna"?"Ex.: Viaturas 30t | Pausa 12:00-13:00 | Encomenda 1455":""})}${fld("form.restricoes","Restrições de acesso e condições especiais",{type:"textarea",cls:"full",ph:"Ex.: acesso por caminho de terra, limite de altura 4 m"})}
   <div class="fld full"><span>Fotografias, documentos ou anexos</span>${anexosHtml(F.anexos,true,"form")}</div>
   <p class="muted full" style="margin:0">A origem do transporte (frota própria ou externa), a viatura, o motorista e os custos são definidos pela Logística no agendamento.</p></div></section>`;}
@@ -1231,7 +1241,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
   if(t==="viatura"&&pi&&pf&&pf<=pi){F.err="O fim do período tem de ser depois do início.";return render();}
   if(submeter){const miss=[];const need=(c,l)=>{if(!c)miss.push(l);};
     if(t==="viatura"){need(F.categoriaId,"tipo de viatura");need(F.equipamentoId,"viatura");if((M.eq[F.equipamentoId]?.variantes||[]).length)need(F.variante,"variante");need(pi,"início do período");need(pf,"fim do período");}
-    if(t==="armazem"||t==="fornecedor"){need(F.categoriaId,"tipo de viatura");need(F.equipamentoId,"viatura");}
+    if(t==="armazem"||t==="fornecedor"){need(F.categoriaId,"tipo de viatura");if(t==="fornecedor")need(F.equipamentoId,"viatura");}
     if(t==="armazem")need(String(F.box||"").trim(),"box de carga");
     if(t==="fornecedor")need(fornNome,"fornecedor");
     if(t==="armazem"||t==="fornecedor"){need(carga.descricao,"descrição da carga");}
@@ -1250,7 +1260,8 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
     if(miss.length){F.err="Para submeter falta preencher: "+miss.join(", ")+".";return render();}}
   if(t==="armazem"||t==="fornecedor"){const bad=F.mExtra.findIndex(L=>!String(L.cDesc||"").trim());if(submeter&&bad>=0){F.err=`Para submeter falta preencher: descrição do material ${bad+2}.`;return render();}}
   if(!F.id&&COMB_T.includes(t)&&(F.cExtra||[]).length){const ms=[];const vistos=new Set([F.obraDesc&&F.obraDesc!=="__outro"?F.obraDesc:""]);
-    F.cExtra.forEach((L,i)=>{const n=`obra de destino ${i+2}`;if(!L.obraDesc)ms.push(`${n}: obra`);else if(L.obraDesc==="__outro"){if(!String(L.localDescarga||"").trim())ms.push(`${n}: local de descarga`);}else if(vistos.has(L.obraDesc))ms.push(`${n}: obra repetida`);else vistos.add(L.obraDesc);if(!String(L.cDesc||"").trim())ms.push(`${n}: descrição da carga`);});
+    if(t==="armazem")F.cExtra.forEach((L,i)=>{const n=`ponto ${i+2}`;const loc=(k,kl,lab)=>{if(!L[k]||(L[k]==="__outro"&&!String(L[kl]||"").trim()))ms.push(`${n}: ${lab}`);};loc("obraCarga","localCarga","local de carga");if(!String(L.box||"").trim())ms.push(`${n}: box de carga`);if(!String(L.cDesc||"").trim())ms.push(`${n}: descrição da carga`);loc("obraDesc","localDescarga","local de descarga");});
+    else F.cExtra.forEach((L,i)=>{const n=`obra de destino ${i+2}`;if(!L.obraDesc)ms.push(`${n}: obra`);else if(L.obraDesc==="__outro"){if(!String(L.localDescarga||"").trim())ms.push(`${n}: local de descarga`);}else if(vistos.has(L.obraDesc))ms.push(`${n}: obra repetida`);else vistos.add(L.obraDesc);if(!String(L.cDesc||"").trim())ms.push(`${n}: descrição da carga`);});
     if(ms.length){F.err="Carga combinada, falta corrigir: "+ms.join(", ")+".";return render();}}
   const mk=G=>{  const pi=fromInput(G.periodoInicio),pf=fromInput(G.periodoFim);const eqId=t==="maquina"?(M.eq["porta-maquinas"]?"porta-maquinas":null):(G.equipamentoId||null);
   let maquinas=null,analise=null;
@@ -1272,8 +1283,8 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
     F.vExtra.forEach(L=>{const G={...F,categoriaId:L.categoriaId,equipamentoId:L.equipamentoId,variante:L.variante,periodoInicio:L.ini_d?`${L.ini_d}T${L.ini_h||"00:00"}`:"",periodoFim:L.fim_d?`${L.fim_d}T${L.fim_h||"23:59"}`:"",periodoInicio_semHora:!!L.ini_d&&!L.ini_h,periodoFim_semHora:!!L.fim_d&&!L.fim_h,_logMan:false};const a=gestorAutoId({tipo:t,equipamentoId:L.equipamentoId,categoriaId:L.categoriaId});if(!F._logMan)G.logisticaIds=a?[a]:F.logisticaIds;for(let q=0;q<Math.max(1,numOr(L.qtd)||1);q++)Gs.push(G);});}
   else if(!F.id&&t==="maquina"&&F.maqModo==="por"&&F.maquinas.length>1)F.maquinas.forEach(n=>{const l=F.maqLoc[n]||{};Gs.push({...F,maquinas:[n],localCarga:String(l.o||"").trim(),localDescarga:String(l.d||"").trim(),coordCarga:"",coordDescarga:"",kmManual:""});});
   else if(!F.id&&t==="maquina"&&F.maqModo==="por"){const n=F.maquinas[0],l=F.maqLoc[n]||{};Gs.push({...F,localCarga:String(l.o||F.localCarga||"").trim(),localDescarga:String(l.d||F.localDescarga||"").trim()});}
-  else{Gs.push(F);if(!F.id&&COMB_T.includes(t))(F.cExtra||[]).forEach(L=>{const o=M.obra[L.obraDesc];Gs.push({...F,_cx:L,obraDesc:L.obraDesc,obraId:o?o.id:F.obraId,localDescarga:o?`${o.codigo} · ${o.nome}`:String(L.localDescarga||"").trim(),coordDescarga:o?obraCoordTxt(o):String(L.coordDescarga||"").trim(),mExtra:[]});});}
-  const datas=Gs.map(G=>{const d=mk(G);d.logisticaIds=(G.logisticaIds&&G.logisticaIds.length)?[...G.logisticaIds]:(d.logisticaId?[d.logisticaId]:[]);d.logisticaId=d.logisticaIds[0]||null;if(t==="armazem"||t==="fornecedor")d.linhas=linhasMat(G);if(G._cx){const L=G._cx;d.carga={descricao:String(L.cDesc||"").trim(),materialId:L.cMat||null,c:null,l:null,a:null,peso:numOr(L.cPeso),volumes:numOr(L.cVol)};d.linhas=[{descricao:d.carga.descricao,materialId:d.carga.materialId,peso:d.carga.peso,volumes:d.carga.volumes,c:null,l:null,a:null}];}return d;});
+  else{Gs.push(F);if(!F.id&&COMB_T.includes(t))(F.cExtra||[]).forEach(L=>{const o=M.obra[L.obraDesc];Gs.push({...F,_cx:L,obraDesc:L.obraDesc,obraId:o?o.id:F.obraId,localDescarga:o?`${o.codigo} · ${o.nome}`:String(L.localDescarga||"").trim(),coordDescarga:o?obraCoordTxt(o):String(L.coordDescarga||"").trim(),mExtra:[],...(t==="armazem"?pontoCarga(L):{})});});}
+  const datas=Gs.map(G=>{const d=mk(G);d.logisticaIds=(G.logisticaIds&&G.logisticaIds.length)?[...G.logisticaIds]:(d.logisticaId?[d.logisticaId]:[]);d.logisticaId=d.logisticaIds[0]||null;if(t==="armazem"||t==="fornecedor")d.linhas=linhasMat(G);if(G._cx){const L=G._cx;d.carga={descricao:String(L.cDesc||"").trim(),materialId:L.cMat||null,c:numOr(L.cC),l:numOr(L.cL),a:numOr(L.cA),peso:numOr(L.cPeso),volumes:numOr(L.cVol)};d.linhas=[{descricao:d.carga.descricao,materialId:d.carga.materialId,peso:d.carga.peso,volumes:d.carga.volumes,c:d.carga.c,l:d.carga.l,a:d.carga.a}];}return d;});
   if(Gs.some(G=>G._cx))datas.forEach((d,i)=>{d.combIdx=i+1;d.combTot=datas.length;});
   const data=datas[0];
   const btns=document.querySelectorAll("[data-act=guardarPed]");btns.forEach(b=>b.disabled=true);
@@ -1935,7 +1946,7 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
   return "";}
 function pedDetalhe(P){const r=P.recurso||{};const o=M.obra[P.obraId]||{};wantProf([P.criadoPor,P.logisticaId,P.confirmadoPor,...(P.historico||[]).map(h=>h.por)]);
   const motivos=P.motivos||{};
-  return `${P.combId?`<div class="note comb-note"><b>⇄ Carga combinada · ${P.combIdx||"?"} de ${P.combTot||"?"}</b>: mesmo local de carga (${esc(P.localCarga||"—")}) e agendamento em conjunto com ${combSib(P).filter(x=>x.id!==P.id).map(x=>`<button class="btn sm ghost" data-act="ped" data-a="${x.id}">${esc(x.numero)} · ${esc(destTxt(x))}</button> ${chipE(x.estado)}`).join(" ")||"—"}</div>`:""}${motivos.rejeicao&&P.estado==="Rejeitado"?`<div class="note bad"><b>Rejeitado:</b> ${esc(motivos.rejeicao)}</div>`:""}${motivos.devolucao&&P.estado==="Devolvido para correção"?`<div class="note warn"><b>Devolvido para correção:</b> ${esc(motivos.devolucao)}</div>`:""}${motivos.cancelamento&&P.estado==="Cancelado"?`<div class="note"><b>Cancelado:</b> ${esc(motivos.cancelamento)}</div>`:""}
+  return `${P.combId?`<div class="note comb-note"><b>⇄ Carga combinada · ${P.combIdx||"?"} de ${P.combTot||"?"}</b>: carga em ${esc(P.localCarga||"—")}, agendada em conjunto com ${combSib(P).filter(x=>x.id!==P.id).map(x=>`<button class="btn sm ghost" data-act="ped" data-a="${x.id}">${esc(x.numero)} · ${esc(destTxt(x))}</button> ${chipE(x.estado)}`).join(" ")||"—"}</div>`:""}${motivos.rejeicao&&P.estado==="Rejeitado"?`<div class="note bad"><b>Rejeitado:</b> ${esc(motivos.rejeicao)}</div>`:""}${motivos.devolucao&&P.estado==="Devolvido para correção"?`<div class="note warn"><b>Devolvido para correção:</b> ${esc(motivos.devolucao)}</div>`:""}${motivos.cancelamento&&P.estado==="Cancelado"?`<div class="note"><b>Cancelado:</b> ${esc(motivos.cancelamento)}</div>`:""}
   <section class="form-sec"><header><span class="k">A</span><h3>Identificação</h3></header><div style="display:block"><dl class="kv"><dt>Número</dt><dd>${pn(P)}</dd><dt>Tipo de pedido</dt><dd>${esc(TIPO[P.tipo]?.n||"—")}</dd>${P.obraId?`<dt>Obra</dt><dd><button class="btn sm ghost" style="padding:0" data-act="obraDet" data-a="${P.obraId}">${esc(obraName(P.obraId))}</button></dd>`:P.cliente?"":`<dt>Obra</dt><dd>—</dd>`}<dt>Zona operacional</dt><dd>${esc(M.zona[zonaOf(P)]?.nome||"Da viatura, quando for atribuída")}</dd><dt>Criado</dt><dd>${fmtDT(P.criadoEm)} por ${esc(nome(P.criadoPor))}</dd><dt>Gestor responsável</dt><dd>${esc(gestoresDoPedido(P).map(g=>g.nome).join(", ")||"Sem gestor para este tipo de viatura e zona")}</dd><dt>Gestor${logIds(P).length>1?"es":""} de logística</dt><dd>${esc(logNomes(P))}</dd><dt>Estado</dt><dd>${chipE(P.estado)}${chipAtr(P)}</dd></dl></div></section>
   <section class="form-sec"><header><span class="k">B</span><h3>${esc(TIPO[P.tipo]?.n||"Necessidades")}</h3></header><div style="display:block">${blocoPedido(P)}</div></section>
   <section class="form-sec"><header><span class="k">C</span><h3>Recursos de transporte</h3></header><div style="display:block"><dl class="kv"><dt>Origem</dt><dd>${chipO(P)}</dd>
@@ -2088,7 +2099,7 @@ const A={
   vRem(i){S.form.vExtra.splice(+i,1);render();},
   mAdd(){S.form.mExtra.push({cDesc:"",cMat:"",cPeso:"",cVol:"",cC:"",cL:"",cA:""});render();},
   mRem(i){S.form.mExtra.splice(+i,1);render();},
-  cAdd(){(S.form.cExtra=S.form.cExtra||[]).push({obraDesc:"",localDescarga:"",coordDescarga:"",cDesc:"",cMat:"",cPeso:"",cVol:""});render();},
+  cAdd(){(S.form.cExtra=S.form.cExtra||[]).push({obraCarga:S.form.tipo==="armazem"?(S.form.obraCarga||""):"",localCarga:"",coordCarga:"",box:"",obraDesc:"",localDescarga:"",coordDescarga:"",cDesc:"",cMat:"",cPeso:"",cVol:"",cC:"",cL:"",cA:""});render();},
   cRem(i){S.form.cExtra.splice(+i,1);render();},
   assignTo(pid,vid){if(!can.log()||!M.ped[pid])return;A.agendar(pid);const f=S.modal.f,v=M.via[vid],P=M.ped[pid];f.origem="propria";f.viaturaId=vid;
     if(v){f.motorista=(v.virtual?v.pm.mot:v.motorista)||f.motorista||"";if(!f.equipamentoId||(P.recurso&&P.recurso.viaturaId!==vid))f.equipamentoId=vEqs(v)[0]||f.equipamentoId||"";}
