@@ -145,7 +145,7 @@ tr:last-child td{border-bottom:0}
 .c-ext{color:var(--ext);border-color:color-mix(in srgb,var(--ext) 50%,transparent);background:color-mix(in srgb,var(--ext) 8%,transparent)}
 .c-comb{color:var(--comb);border-color:color-mix(in srgb,var(--comb) 55%,transparent);background:color-mix(in srgb,var(--comb) 12%,transparent);font-weight:600}
 .ev.comb{border-left:4px solid var(--comb)}.ag-it.comb,.panel.comb{box-shadow:inset 4px 0 0 var(--comb)}.pc-i.comb{box-shadow:inset 3px 0 0 var(--comb);padding-left:6px}
-.xline.comb{border-left:3px solid var(--comb)}.pt-h{font-weight:600;font-size:12.5px;color:var(--comb);margin-top:4px}.note.comb-note{border-left:4px solid var(--comb)}.comb-sec>header .k{background:var(--comb);color:#fff}
+.xline.comb{border-left:3px solid var(--comb)}.pt-h{font-weight:600;font-size:12.5px;color:var(--comb);margin-top:4px}.ag-it.sel{outline:2px solid var(--comb);outline-offset:-2px}.ag-ck{margin:0 4px 0 0;width:16px;height:16px;accent-color:var(--comb)}.ag-selbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px;padding:6px 8px;border-radius:10px;background:color-mix(in srgb,var(--comb) 10%,transparent)}.note.comb-note{border-left:4px solid var(--comb)}.comb-sec>header .k{background:var(--comb);color:#fff}
 .pn{font-family:var(--f-mono);font-size:12px;padding:1px 6px;border:1px solid var(--line);border-radius:4px;background:var(--panel2);white-space:nowrap}
 .plate{font-family:var(--f-mono);font-size:12px;padding:0 6px;border:1px solid var(--ink);border-radius:3px;letter-spacing:.06em;white-space:nowrap}
 
@@ -959,6 +959,46 @@ function combSib(p){return p&&p.combId?S.d.pedidos.filter(x=>x.combId===p.combId
 function chipComb(p,curto){if(!p||!p.combId)return "";const o=combSib(p).filter(x=>x.id!==p.id).map(x=>x.numero).join(", ");
   return ` <span class="chip c-comb" title="Carga combinada${o?" com "+esc(o):""}">⇄ ${curto?"":"Carga combinada · "}${p.combIdx||"?"}${curto?"/":" de "}${p.combTot||"?"}</span>`;}
 function chipX(p){return chipAtr(p)+chipComb(p);}
+/* Combinar cargas no plano: seleção no painel "Por agendar" e rota sugerida (cargas primeiro, depois descargas) */
+function agSelBar(porAg){if(!can.log())return "";const vis=new Set(porAg.map(p=>p.id));S.agSel=S.agSel||new Set();[...S.agSel].forEach(id=>{if(!vis.has(id))S.agSel.delete(id);});const n=S.agSel.size;
+  return n?`<div class="ag-selbar"><b>${n} selecionado(s)</b><button class="btn sm pri" data-act="combAbrir" ${n<2?"disabled":""}>⇄ Combinar carga</button><button class="btn sm ghost" data-act="agSelClr">Limpar</button></div>`:`<p class="muted" style="font-size:12px;margin:0 0 6px">Para combinar cargas: selecione 2 ou mais cartões (caixa ou Ctrl+clique) e use o botão direito.</p>`;}
+const combVel=()=>Math.max(1,PS.velLimite*(1-PS.velReducao/100));
+function combPerms(a){if(a.length<=1)return [a.slice()];const out=[];a.forEach((x,i)=>combPerms(a.slice(0,i).concat(a.slice(i+1))).forEach(r=>out.push([x,...r])));return out;}
+function combGreedy(start,rest,D){const seq=[];let cur=start;const r=rest.slice();while(r.length){r.sort((a,b)=>(cur==null?0:D[cur][a])-(cur==null?0:D[cur][b]));cur=r.shift();seq.push(cur);}return seq;}
+function combCusto(s,D){return s.reduce((t,x,i)=>i?t+D[s[i-1]][x]:t,0);}
+function combMelhor(C,Dd,D){const PC=C.length<=6?combPerms(C):[combGreedy(null,C,D)];let best=null,bc=Infinity;
+  for(const pc of PC){const PD=Dd.length<=6?combPerms(Dd):[combGreedy(pc[pc.length-1],Dd,D)];for(const pd of PD){const s=pc.concat(pd);const c=combCusto(s,D);if(c<bc){bc=c;best=s;}}}
+  return best;}
+async function combPrep(ids){const ps=ids.map(id=>M.ped[id]).filter(Boolean);const stops=[];
+  const tC=p=>numOr(p.tempoCargaMin)??(+CFG().tCargaMin||0),tD=p=>numOr(p.tempoDescargaMin)??(+CFG().tDescargaMin||0);
+  ps.forEach(p=>{if(p.localCarga||p.coordCarga)stops.push({t:"c",pid:p.id,nome:p.localCarga||p.coordCarga,pt:ptLoc(p.localCarga,p.coordCarga),min:tC(p)});});
+  ps.forEach(p=>stops.push({t:"d",pid:p.id,nome:p.localDescarga||p.coordDescarga,pt:ptLoc(p.localDescarga,p.coordDescarga),min:tD(p)}));
+  let D=null,fonte="manual";
+  if(stops.length>1&&stops.every(s=>s.pt)){
+    try{const j=await fetch(`https://router.project-osrm.org/table/v1/driving/${rkey(stops.map(s=>s.pt))}?annotations=distance`).then(r=>r.json());
+      if(j&&j.distances&&j.distances.every(row=>row.every(x=>x!=null))){D=j.distances.map(row=>row.map(x=>x/1000));fonte="osrm";}}catch(e){}
+    if(!D){D=stops.map(a=>stops.map(b=>haversine(a.pt,b.pt)*PS.roadFactor));fonte="estimativa";}}
+  const C=stops.map((s,i)=>i).filter(i=>stops[i].t==="c"),Dd=stops.map((s,i)=>i).filter(i=>stops[i].t==="d");
+  const ordem=D?combMelhor(C,Dd,D):[...C,...Dd];
+  return {stops,D,fonte,ordem,sug:[...ordem]};}
+function combTotais(m){const km=m.D?combCusto(m.ordem,m.D):null;const cond=km!=null?Math.round(km/combVel()*60):null;const par=m.ordem.reduce((t,i)=>t+(m.stops[i].min||0),0);
+  return {km,cond,par,min:(cond||0)+par};}
+function combModalHtml(m,wrap){const head=`<h2>⇄ Combinar carga (${m.ids.length} pedidos)</h2>`;
+  if(m.calc)return wrap(head,`<div class="empty">A calcular a rota mais rápida…</div>`,`<button class="btn" data-act="close">Cancelar</button>`);
+  const T=combTotais(m),Ts=m.D?combCusto(m.sug,m.D):null,alt=m.ordem.join()!==m.sug.join();
+  const rows=m.ordem.map((si,k)=>{const s=m.stops[si],P=M.ped[s.pid];const prev=k?m.ordem[k-1]:null;const mesmo=j=>j>=0&&j<m.ordem.length&&m.stops[m.ordem[j]].t===s.t;
+    return `<tr><td class="num">${k+1}</td><td><span class="chip ${s.t==="c"?"c-info":"c-comb"}">${s.t==="c"?"Carga":"Descarga"}</span></td><td>${esc(s.nome||"—")}${s.pt?"":' <span class="chip c-warn">sem coordenadas</span>'}</td><td><b>${esc(P?.numero||"")}</b> · ${esc(P?destTxt(P):"")}</td><td class="num">${prev!=null&&m.D?Math.round(m.D[prev][si])+" km":""}</td>
+      <td style="white-space:nowrap"><button class="btn sm ghost" data-act="combMover" data-a="${k}|-1" ${mesmo(k-1)?"":"disabled"} aria-label="Subir">↑</button><button class="btn sm ghost" data-act="combMover" data-a="${k}|1" ${mesmo(k+1)?"":"disabled"} aria-label="Descer">↓</button></td></tr>`;}).join("");
+  const fonteTxt=m.fonte==="osrm"?"Distâncias por estrada (OpenStreetMap/OSRM)":m.fonte==="estimativa"?"O serviço de rotas não respondeu: distâncias estimadas em linha reta × "+PS.roadFactor:"Há paragens sem coordenadas: não foi possível calcular nem sugerir a ordem. Ordene à mão.";
+  const body=`<p class="muted" style="margin-top:0">O camião passa primeiro por todos os locais de carga e depois pelos de descarga. ${m.D?"A ordem sugerida é a mais curta; use ↑ ↓ para a alterar.":""}</p>
+   <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>#</th><th>Paragem</th><th>Local</th><th>Pedido</th><th>Desde a anterior</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+   <div class="note comb-note" style="margin-top:10px"><b>${T.km!=null?Math.round(T.km)+" km · ":""}${fmtMin(T.min)}</b> ${T.cond!=null?`<small>(condução ${fmtMin(T.cond)} a ${Math.round(combVel())} km/h + cargas e descargas ${fmtMin(T.par)})</small>`:`<small>(só cargas e descargas: ${fmtMin(T.par)})</small>`}
+   ${alt&&Ts!=null?`<br><small>Ordem alterada · a sugerida tinha ${Math.round(Ts)} km.</small>`:""}<br><small class="muted">${fonteTxt}. Não inclui a deslocação desde a sede nem as pausas do tacógrafo.</small></div>${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`;
+  return wrap(head,body,`<button class="btn" data-act="close">Cancelar</button>${alt?`<button class="btn" data-act="combRepor">Repor sugestão</button>`:""}<button class="btn pri" data-act="combOk">Validar e combinar</button>`);}
+function showCombCtx(x,y,id){hideCtx();const P=M.ped[id];if(!P)return;S.agSel=S.agSel||new Set();if(!S.agSel.has(id)){S.agSel.add(id);render();}const n=S.agSel.size;
+  const d=document.createElement("div");d.className="ctx";d.setAttribute("role","menu");
+  d.innerHTML=`<div class="ctx-h">${esc(P.numero)}<br><b>${esc(destTxt(P))}</b></div>${n>=2?`<button type="button" role="menuitem" data-act="combAbrir">⇄ Combinar carga (${n} pedidos)?</button>`:`<div class="ctx-h">Selecione mais cartões (caixa ou Ctrl+clique) para combinar.</div>`}${P.combId?`<button type="button" role="menuitem" class="bad" data-act="combSeparar" data-a="${esc(id)}">Separar carga</button>`:""}`;
+  document.body.appendChild(d);const r=d.getBoundingClientRect();d.style.left=Math.max(8,Math.min(x,innerWidth-r.width-8))+"px";d.style.top=Math.max(8,Math.min(y,innerHeight-r.height-8))+"px";ctxEl=d;const b=d.querySelector("button");if(b)b.focus();}
 const numT=p=>(p.numero||"novo")+(p.cargaTot>1?` · ${p.cargaIdx}/${p.cargaTot}`:"");
 const pn=p=>`<span class="pn">${esc(numT(p))}</span>`;
 
@@ -1342,7 +1382,7 @@ function vAgenda(){const f=S.f.ag;const ps=agFilt(scope());const plan=ps.filter(
    ${fld("f.ag.obra","Obra",{type:"select",opts:optObras("Todas",true)})}${fld("f.ag.tipo","Tipo de pedido",{type:"select",opts:optTipos()})}${fld("f.ag.viatura","Viatura",{type:"select",opts:opt0("Todas").concat(unidadesPlano().map(v=>[v.id,`${v.matricula||v.ident}${v.virtual?" · "+v.pm.id:""} · ${vTag(v)}`]))})}${fld("f.ag.origem","Origem",{type:"select",opts:optOrig})}
    ${f.vista==="plano"?fld("f.ag.soCargas","Só viaturas com cargas",{type:"check"}):""}<button class="btn ghost" data-act="clrf" data-a="ag">Limpar</button></div>
   ${(()=>{const side=can.log()&&!S.agSideOff;return `<div class="ag-layout${side?"":" no-side"}">${side?`<aside class="ag-side" data-dropback="1" aria-label="Pedidos por agendar"><div class="ph"><h3>Por agendar <span class="muted">(${porAg.length})</span></h3><button class="btn sm ghost" data-act="agSide" title="Ocultar painel" aria-label="Ocultar painel">◀</button></div>
-   ${porAg.length?`<div class="ag-list">${porAg.map(p=>`<div class="ag-it ${p.combId?"comb":""}" draggable="true" data-drag="${p.id}" title="Arraste para uma viatura do plano para agendar"><div class="row">${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipX(p)}</div><b>${esc(destTxt(p))}</b><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")}</span><small>Pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</small><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido à espera de agendamento.</div>`}</aside>`:""}<div class="ag-main">`;})()}
+   ${porAg.length?`${agSelBar(porAg)}<div class="ag-list">${porAg.map(p=>`<div class="ag-it ${p.combId?"comb":""} ${S.agSel&&S.agSel.has(p.id)?"sel":""}" draggable="true" data-drag="${p.id}" title="Arraste para uma viatura do plano para agendar · Ctrl+clique para selecionar · botão direito para combinar"><div class="row">${can.log()?`<input type="checkbox" class="ag-ck" data-act="agSel" data-a="${p.id}" ${S.agSel&&S.agSel.has(p.id)?"checked":""} aria-label="Selecionar ${esc(p.numero)} para combinar">`:""}${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipX(p)}</div><b>${esc(destTxt(p))}</b><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")}</span><small>Pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</small><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido à espera de agendamento.</div>`}</aside>`:""}<div class="ag-main">`;})()}
   <div class="row">${can.log()&&S.agSideOff?`<button class="btn" data-act="agSide" data-dropback="1" title="Mostrar pedidos por agendar">Por agendar (${porAg.length}) ▸</button>`:""}<button class="btn" data-act="agNav" data-a="-1" aria-label="Anterior">◀</button><button class="btn" data-act="agNav" data-a="0">Hoje</button><button class="btn" data-act="agNav" data-a="1" aria-label="Seguinte">▶</button>${fld("f.ag.data","Ir para",{type:"date"})}${title?`<h2 style="margin-left:8px">${esc(title)}</h2>`:""}
    <span class="legend" style="margin-left:auto"><span><i style="background:var(--own)"></i>Frota própria</span><span><i style="background:var(--ext)"></i>Externo</span><span><i style="background:var(--idle)"></i>Sem recurso</span></span></div>
   ${body}
@@ -1828,6 +1868,7 @@ function vConfig(){const ad=realRole()==="admin";if(!ad)return denied();if(!S.cf
 function openPed(id){S.modal={t:"ped",id};render();}
 function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
   const wrap=(title,body,foot,narrow)=>`<div class="scrim" data-act="closeBg"><div class="drawer ${narrow?"narrow":""}" role="dialog" aria-modal="true" aria-label="${esc(title.replace(/<[^>]+>/g,""))}"><div class="dhd"><div>${title}</div><button class="btn ghost" data-act="close" aria-label="Fechar">✕</button></div><div class="mbody">${body}</div>${foot?`<div class="dft">${foot}</div>`:""}</div></div>`;
+  if(m.t==="combinar")return combModalHtml(m,wrap);
   if(m.t==="ped"){if(!P)return wrap("<h2>Pedido</h2>",`<div class="empty">Este pedido não existe ou não está visível para o seu perfil.</div>`);return wrap(`<div class="row">${pn(P)} ${chipT(P)} ${chipE(P.estado)} ${chipP(P.prioridade)}${chipX(P)}</div><h2 style="margin-top:6px">${esc(destTxt(P))}</h2>`,pedDetalhe(P),pedAcoes(P));}
   if(m.t==="decisao"){const L={aprovar:["Aprovar pedido","Aprovar","pri"],rejeitar:["Rejeitar pedido","Rejeitar","bad"],devolver:["Devolver para correção","Devolver","pri"]}[m.tipo];
     return wrap(`<h2>${L[0]} ${esc(P.numero)}</h2>`,`<p class="muted" style="margin:0">${esc(destTxt(P))} · ${esc(eqTxt(P))} · pretendido ${fmtPed(P.pretendidaEm,P.pretendidaSemHora)}</p>
@@ -1946,7 +1987,7 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
   return "";}
 function pedDetalhe(P){const r=P.recurso||{};const o=M.obra[P.obraId]||{};wantProf([P.criadoPor,P.logisticaId,P.confirmadoPor,...(P.historico||[]).map(h=>h.por)]);
   const motivos=P.motivos||{};
-  return `${P.combId?`<div class="note comb-note"><b>⇄ Carga combinada · ${P.combIdx||"?"} de ${P.combTot||"?"}</b>: carga em ${esc(P.localCarga||"—")}, agendada em conjunto com ${combSib(P).filter(x=>x.id!==P.id).map(x=>`<button class="btn sm ghost" data-act="ped" data-a="${x.id}">${esc(x.numero)} · ${esc(destTxt(x))}</button> ${chipE(x.estado)}`).join(" ")||"—"}</div>`:""}${motivos.rejeicao&&P.estado==="Rejeitado"?`<div class="note bad"><b>Rejeitado:</b> ${esc(motivos.rejeicao)}</div>`:""}${motivos.devolucao&&P.estado==="Devolvido para correção"?`<div class="note warn"><b>Devolvido para correção:</b> ${esc(motivos.devolucao)}</div>`:""}${motivos.cancelamento&&P.estado==="Cancelado"?`<div class="note"><b>Cancelado:</b> ${esc(motivos.cancelamento)}</div>`:""}
+  return `${P.combId?`<div class="note comb-note"><b>⇄ Carga combinada · ${P.combIdx||"?"} de ${P.combTot||"?"}</b>: carga em ${esc(P.localCarga||"—")}, agendada em conjunto com ${combSib(P).filter(x=>x.id!==P.id).map(x=>`<button class="btn sm ghost" data-act="ped" data-a="${x.id}">${esc(x.numero)} · ${esc(destTxt(x))}</button> ${chipE(x.estado)}`).join(" ")||"—"}${P.combRota&&P.combRota.paragens?`<br><small>Rota validada: ${P.combRota.paragens.map((s,i)=>`${i+1}. ${s.t==="c"?"Carga":"Descarga"} ${esc(s.nome||"—")}`).join(" → ")}${P.combRota.km!=null?` · ${Math.round(P.combRota.km)} km`:""} · ${fmtMin(P.combRota.min)}</small>`:""}</div>`:""}${motivos.rejeicao&&P.estado==="Rejeitado"?`<div class="note bad"><b>Rejeitado:</b> ${esc(motivos.rejeicao)}</div>`:""}${motivos.devolucao&&P.estado==="Devolvido para correção"?`<div class="note warn"><b>Devolvido para correção:</b> ${esc(motivos.devolucao)}</div>`:""}${motivos.cancelamento&&P.estado==="Cancelado"?`<div class="note"><b>Cancelado:</b> ${esc(motivos.cancelamento)}</div>`:""}
   <section class="form-sec"><header><span class="k">A</span><h3>Identificação</h3></header><div style="display:block"><dl class="kv"><dt>Número</dt><dd>${pn(P)}</dd><dt>Tipo de pedido</dt><dd>${esc(TIPO[P.tipo]?.n||"—")}</dd>${P.obraId?`<dt>Obra</dt><dd><button class="btn sm ghost" style="padding:0" data-act="obraDet" data-a="${P.obraId}">${esc(obraName(P.obraId))}</button></dd>`:P.cliente?"":`<dt>Obra</dt><dd>—</dd>`}<dt>Zona operacional</dt><dd>${esc(M.zona[zonaOf(P)]?.nome||"Da viatura, quando for atribuída")}</dd><dt>Criado</dt><dd>${fmtDT(P.criadoEm)} por ${esc(nome(P.criadoPor))}</dd><dt>Gestor responsável</dt><dd>${esc(gestoresDoPedido(P).map(g=>g.nome).join(", ")||"Sem gestor para este tipo de viatura e zona")}</dd><dt>Gestor${logIds(P).length>1?"es":""} de logística</dt><dd>${esc(logNomes(P))}</dd><dt>Estado</dt><dd>${chipE(P.estado)}${chipAtr(P)}</dd></dl></div></section>
   <section class="form-sec"><header><span class="k">B</span><h3>${esc(TIPO[P.tipo]?.n||"Necessidades")}</h3></header><div style="display:block">${blocoPedido(P)}</div></section>
   <section class="form-sec"><header><span class="k">C</span><h3>Recursos de transporte</h3></header><div style="display:block"><dl class="kv"><dt>Origem</dt><dd>${chipO(P)}</dd>
@@ -1991,7 +2032,8 @@ function pedAcoes(P){const b=[];const L=can.log(),e=P.estado;
 function agendarBody(P,m){const F=m.f;const eqSel=F.equipamentoId||"";
   const RA=P.tipo!=="maquina"&&F.origem!=="externa"?rotaPedido(P,F.partida,F.partidaCoord,()=>{if(S.modal&&S.modal.t==="agendar")render();}):null;m._rota=RA&&!RA.incompleta?RA:null;
   const isV=P.tipo==="viatura",isM=P.tipo==="maquina",podeReg=P.tipo!=="maquina"&&F.origem==="propria";
-  if(m._rota&&F.inicio&&!isM){const ini0=fromInput(F.inicio);const af=ini0?toInput(new Date(Date.parse(ini0)+m._rota.total*60000).toISOString()):"";if(F._autoCh===undefined)F._autoCh=F.chegada;if(!F.chegada||F.chegada===F._autoCh){F.chegada=af;F._autoCh=af;}}
+  if((P.combRota?.min||m._rota)&&F.inicio&&!isM){const ini0=fromInput(F.inicio);const af=ini0?toInput(new Date(Date.parse(ini0)+(P.combRota?.min||m._rota.total)*60000).toISOString()):"";if(F._autoCh===undefined)F._autoCh=F.chegada;if(!F.chegada||F.chegada===F._autoCh){F.chegada=af;F._autoCh=af;}}
+  if(isM&&P.combRota?.min&&F.inicio){const ini0=fromInput(F.inicio);const af=ini0?toInput(new Date(Date.parse(ini0)+P.combRota.min*60000).toISOString()):"";if(F._autoFim===undefined)F._autoFim=F.fim;if(!F.fim||F.fim===F._autoFim){F.fim=af;F._autoFim=af;}}
   if(!isV&&!isM)F.fim=F.chegada||"";
   if(podeReg&&F.regressar&&!F.regSede)F.regSede=sedeRegDefault(F);
   const RG=podeReg&&F.regressar&&F.regSede?rotaRegresso(P,F.regSede,()=>{if(S.modal&&S.modal.t==="agendar")render();}):null;m._reg=RG&&!RG.incompleta?RG:null;
@@ -2109,7 +2151,29 @@ const A={
   lidas(){try{localStorage.setItem("notifLidas",nowISO());}catch(e){}render();},
   goto(r){S.notifOpen=false;location.hash=r;},
   ped(id){S.notifOpen=false;openPed(id);}, obraDet(id){S.modal={t:"obraDet",oid:id};render();},
-  close(){S.modal=null;render();}, closeBg(a,t,e){if(e.target===t&&_downScrim===t){S.modal=null;render();}},
+  close(){S.modal=null;render();},
+  agSel(id){S.agSel=S.agSel||new Set();S.agSel.has(id)?S.agSel.delete(id):S.agSel.add(id);render();},
+  agSelClr(){S.agSel=new Set();render();},
+  combAbrir(){hideCtx();if(!can.log())return;const sel=[...(S.agSel||[])].filter(id=>M.ped[id]);const ids=[...new Set(sel.flatMap(id=>{const p=M.ped[id];return p.combId?combSib(p).map(x=>x.id):[id];}))];
+    const ps=ids.map(id=>M.ped[id]);const bloq=ps.filter(p=>!["Aprovado","Por agendar"].includes(p.estado));
+    if(ids.length<2){toast("Selecione 2 ou mais pedidos para combinar.","bad");return;}
+    if(ps.some(p=>p.tipo==="viatura")){toast("Os pedidos “Atribuir viatura” não têm carga nem descarga e não se combinam.","bad");return;}
+    if(bloq.length){toast(`Só se combinam pedidos por agendar. Fora deste estado: ${bloq.map(p=>p.numero+" ("+p.estado+")").join(", ")}.`,"bad");return;}
+    S.modal={t:"combinar",ids,calc:true};render();
+    combPrep(ids).then(r=>{if(S.modal&&S.modal.t==="combinar"&&S.modal.ids===ids){Object.assign(S.modal,r,{calc:false});render();}}).catch(e=>{if(S.modal&&S.modal.t==="combinar"){S.modal.calc=false;S.modal.err=errMsg(e);render();}});},
+  combMover(a){const m=S.modal;if(!m||m.t!=="combinar")return;const[k,d]=a.split("|").map(Number);const j=k+d;if(j<0||j>=m.ordem.length)return;if(m.stops[m.ordem[k]].t!==m.stops[m.ordem[j]].t)return;[m.ordem[k],m.ordem[j]]=[m.ordem[j],m.ordem[k]];render();},
+  combRepor(){const m=S.modal;if(m&&m.sug){m.ordem=[...m.sug];render();}},
+  async combOk(){const m=S.modal;if(!m||m.t!=="combinar"||m.calc)return;const ps=m.ids.map(id=>M.ped[id]);if(ps.some(p=>!p||!["Aprovado","Por agendar"].includes(p.estado))){m.err="Um dos pedidos mudou de estado entretanto. Feche e volte a selecionar.";return render();}
+    const T=combTotais(m);const cid=rid();const paragens=m.ordem.map(i=>({t:m.stops[i].t,pid:m.stops[i].pid,nome:m.stops[i].nome||""}));
+    const ordD=paragens.filter(s=>s.t==="d").map(s=>s.pid);const tot=ps.length;const tt=nowISO();
+    const combRota={paragens,km:T.km!=null?Math.round(T.km*10)/10:null,min:T.min,fonte:m.fonte,validadaEm:tt,validadaPor:S.me.id};
+    for(const p of ps){const outros=ps.filter(x=>x.id!==p.id).map(x=>x.numero).join(", ");
+      await savePed(p,{combId:cid,combIdx:ordD.indexOf(p.id)+1,combTot:tot,combRota,historico:hist(p,"Carga combinada",`Com ${outros} · ${combRota.km!=null?combRota.km+" km · ":""}${fmtMin(T.min)}`)});}
+    S.modal=null;S.agSel=new Set();toast(`Carga combinada: ${ps.map(p=>p.numero).join(", ")}. Arraste um dos cartões para um camião para agendar a carga toda.`);render();},
+  async combSeparar(id){hideCtx();const P=M.ped[id];if(!P||!P.combId||!can.log())return;const sib=combSib(P);const ag=sib.filter(x=>["Agendado","Em execução","Concluído"].includes(x.estado));
+    if(ag.length){toast(`Não é possível separar: ${ag.map(x=>x.numero+" ("+x.estado+")").join(", ")}. Desagende primeiro.`,"bad");return;}
+    for(const x of sib)await savePed(x,{combId:null,combIdx:null,combTot:null,combRota:null,historico:hist(x,"Carga separada",`Deixou de estar combinada com ${sib.filter(y=>y.id!==x.id).map(y=>y.numero).join(", ")}`)});
+    S.agSel=new Set();toast(`Carga separada: ${sib.map(x=>x.numero).join(", ")} voltaram a ser pedidos independentes.`);render();}, closeBg(a,t,e){if(e.target===t&&_downScrim===t){S.modal=null;render();}},
   clrq(){S.gq="";render();},
   clrf(k){const keep={ped:{},dash:{},ag:{vista:S.f.ag.vista,data:S.f.ag.data},ext:{tab:S.f.ext.tab,gran:S.f.ext.gran},rel:{tab:S.f.rel.tab,gran:S.f.rel.gran}}[k];Object.keys(S.f[k]).forEach(x=>{if(!(x in keep))S.f[k][x]=x==="ids"?null:"";});Object.assign(S.f[k],keep);render();},
   clrids(){S.f.ped.ids=null;S.f.ped.idsLabel="";render();},
@@ -2387,6 +2451,9 @@ function showCtx(x,y,col,id){hideCtx();const us=usosDe(col,id);const d=document.
 document.addEventListener("contextmenu",e=>{const t=e.target.closest("[data-del]");if(!t||!podeEliminar()){hideCtx();return;}e.preventDefault();const k=t.dataset.del,i=k.indexOf("|");showCtx(e.clientX,e.clientY,k.slice(0,i),k.slice(i+1));});
 document.addEventListener("click",e=>{if(ctxEl&&!e.target.closest(".ctx"))hideCtx();},true);
 window.addEventListener("scroll",hideCtx,{passive:true});
+/* Painel "Por agendar": botão direito para combinar ou separar; Ctrl+clique para selecionar */
+document.addEventListener("contextmenu",e=>{const it=e.target.closest&&e.target.closest(".ag-it[data-drag]");if(!it||!can.log())return;e.preventDefault();showCombCtx(e.clientX,e.clientY,it.dataset.drag);});
+document.addEventListener("click",e=>{if(!(e.ctrlKey||e.metaKey))return;const it=e.target.closest&&e.target.closest(".ag-it[data-drag]");if(!it||!can.log()||e.target.closest("button,input,a,select"))return;e.preventDefault();e.stopPropagation();A.agSel(it.dataset.drag);},true);
 let _cvDone=new Set();
 /* Primeiro acesso: o próprio ativa o seu convite e o servidor valida-o pelo email da sessão (ativar_convite) */
 async function syncConvites(){if(!db||!S.me.id||!COLS.every(c=>S.loaded[c]))return;
