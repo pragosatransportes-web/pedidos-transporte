@@ -632,6 +632,7 @@ function sedesCfg(){const c=CFG().sedes;return Array.isArray(c)&&c.length?c:CFG_
 function sedePt(nome){const x=sedesCfg().find(z=>z.nome===nome);if(!x)return null;if(x.lat!=null&&x.lon!=null)return{lat:+x.lat,lon:+x.lon,nome:x.nome};const o=S.d.obras.find(o=>String(o.codigo).trim()===String(x.obra||"").trim());return o&&o.lat!=null?{lat:o.lat,lon:o.lon,nome:x.nome}:null;}
 function optPartida(){return sedesCfg().map(x=>["s:"+x.nome,`Sede · ${x.nome}`]).concat(S.d.obras.filter(o=>o.ativa!==false&&o.lat!=null).sort((a,b)=>String(a.codigo).localeCompare(b.codigo,"pt",{numeric:true})).map(o=>["o:"+o.id,`Obra · ${o.codigo} · ${o.nome}`]),[["m:","Outro ponto (marcar no mapa ou coordenadas)"]]);}
 function ptPartida(G){const v=G.partida||"";if(v.startsWith("s:"))return sedePt(v.slice(2));if(v.startsWith("o:")){const o=M.obra[v.slice(2)];return o&&o.lat!=null?{lat:o.lat,lon:o.lon,nome:o.nome}:null;}const c=parseCoords(G.partidaCoord);return c?{...c,nome:"Ponto marcado"}:null;}
+function sedeInicio(v){return v?(partidaNome({partida:partidaDefault(v.id)})||CFG().sedePadrao||"Tojal"):"";}
 function partidaNome(G){const v=G.partida||"";if(v.startsWith("s:"))return v.slice(2);if(v.startsWith("o:")){const o=M.obra[v.slice(2)];return o?`${o.codigo} · ${o.nome}`:"Obra";}return G.partidaCoord?"Ponto marcado":"";}
 const _geo={};
 function ptLoc(nome,coord){return parseCoords(coord)||locResolve(nome)||(nome&&_geo[normLoc(nome)])||null;}
@@ -838,8 +839,9 @@ function intPrev(p){return p.previstoInicio?[Date.parse(p.previstoInicio),fimPre
    Se o intervalo sem trabalho tiver pelo menos 9 h, conta 9 h de repouso diário e o resto é espera; a ocupação da viatura conta só o trabalho. */
 const REP_MIN=540;
 function trabMin(p){const a=p.recurso&&p.recurso.afetacao,r=p.rota;
-  if(a&&a.totalMin!=null)return {ini:(a.conducao1Min||0)+(a.cargaMin||0),fim:(a.conducao2Min||0)+(a.descargaMin||0)};
-  if(r&&r.totalMin!=null)return {ini:(r.conducao1Min||0)+(r.cargaMin||0),fim:(r.conducao2Min||0)+(r.descargaMin||0)};
+  const rg=(p.recurso&&p.recurso.regresso&&p.recurso.regresso.min)||0;
+  if(a&&a.totalMin!=null)return {ini:(a.conducao1Min||0)+(a.cargaMin||0),fim:(a.conducao2Min||0)+(a.descargaMin||0)+rg};
+  if(r&&r.totalMin!=null)return {ini:(r.conducao1Min||0)+(r.cargaMin||0),fim:(r.conducao2Min||0)+(r.descargaMin||0)+rg};
   return null;}
 function segIntervalo(a,b,tIni,tFim){const tot=(b-a)/60000;if(!(tot>0))return null;const trab=tIni+tFim;const gap=tot-trab;const rep=gap>=REP_MIN?REP_MIN:0;
   return {tot,trab,rep,esp:Math.max(0,gap-rep),blocos:rep?[[a,a+tIni*60000],[b-tFim*60000,b]]:null};}
@@ -1477,10 +1479,10 @@ function planoCard(v,peds,d,o={}){const lines=Math.max(5,peds.length+1);const fi
   const mot=v.virtual?v.pm.mot:v.motorista;
   return `<article ${!o.sem&&can.log()?`data-drop="${esc(v.id)}"`:""} class="pc ${o.cls||""} ${v.suplente?"sup":""} ${(v.disponibilidade||"disponivel")!=="disponivel"?"indisp":""}"><header><div class="pc-t">${o.titulo?`<b>${esc(o.titulo)}</b>`:`<span class="plate">${esc(v.matricula||v.ident)}</span>${v.virtual?`<b>${esc(v.pm.id)}</b>`:""}<span class="pc-tag">${esc(vTag(v))}</span>`}</div>
    ${o.titulo?(o.sub?`<div class="pc-s">${esc(o.sub)}</div>`:""):`<div class="pc-s">${esc(vReboques(v)||"—")}  ·  ${mot?esc(mot):'<span class="muted">sem motorista</span>'}</div>${occBar(ocupacao(v.id,d.dia))}`}
-   ${o.titulo?"":`<small>${esc([v.empresa||(v.virtual?"CPSA":""),M.zona[vZona(v)]?.nome,v.sede&&normNome(v.sede)!==normNome(M.zona[vZona(v)]?.nome)?v.sede:"",v.suplente?"suplente":"",(v.disponibilidade||"disponivel")==="manutencao"?"em manutenção":(v.disponibilidade==="indisponivel"?"indisponível":"")].filter(Boolean).join(" · "))}</small>`}</header>
+   ${o.titulo?"":`<small>${esc([v.empresa||(v.virtual?"CPSA":""),M.zona[vZona(v)]?.nome,"Sede: "+sedeInicio(v),v.suplente?"suplente":"",(v.disponibilidade||"disponivel")==="manutencao"?"em manutenção":(v.disponibilidade==="indisponivel"?"indisponível":"")].filter(Boolean).join(" · "))}</small>`}</header>
   <ol class="pc-l">${peds.map(p=>planoItem(p,d.dia)).join("")}${Array.from({length:fill},()=>`<li class="vz"></li>`).join("")}</ol>${sel||regB?`<div class="pc-acts">${sel}${regB}</div>`:""}</article>`;}
 function regBase(P){if(P.fimTrabalho)return Date.parse(P.fimTrabalho);const f=fimPrevisto(P);if(f==null)return null;const g=P.recurso&&P.recurso.regresso;return g?f-g.min*60000:f;}
-function ultimoDoDia(peds,dia){const c=(peds||[]).filter(p=>p.tipo!=="maquina"&&!FINAIS.includes(p.estado)&&p.previstoInicio&&dayKey(new Date(fimPrevisto(p)).toISOString())===dia);if(!c.length)return null;return c.reduce((a,b)=>fimPrevisto(b)>fimPrevisto(a)?b:a);}
+function ultimoDoDia(peds,dia){const c=(peds||[]).filter(p=>!["Rejeitado","Cancelado"].includes(p.estado)&&p.previstoInicio&&dayKey(new Date(fimPrevisto(p)).toISOString())===dia);if(!c.length)return null;return c.reduce((a,b)=>fimPrevisto(b)>fimPrevisto(a)?b:a);}
 function planoHtml(){const d=planoData();const vista=S.planoVista||window.__planoVista||"cards";
   const tot=d.grupos.reduce((s,g)=>s+g.cards.length,0),comC=d.grupos.reduce((s,g)=>s+g.cards.filter(c=>c.peds.length).length,0);
   return `<div class="pc-head"><div><span class="pc-title">Plano de cargas</span> <span class="pc-date num">${d.dia.slice(8)} / ${d.dia.slice(5,7)} / ${d.dia.slice(0,4)}</span> <span class="muted">${DIAS[dow(d.dia)]}</span></div>
@@ -1497,7 +1499,7 @@ function diaHtml(){const d=planoData({todas:true}),f=S.f.ag;
   const resto=vs.filter(c=>!usados.has(c.v.id));if(resto.length&&!f.gestor)blocos.push({t:"Sem gestor responsável",sub:"Viaturas que não estão na cobertura de nenhum gestor (definir em Utilizadores / gestores)",cs:resto});
   else if(resto.length&&f.gestor&&!blocos.length)blocos.push({t:gestorNome(f.gestor),sub:"",cs:resto});
   const linha=c=>{const v=c.v,mot=v.virtual?v.pm.mot:v.motorista,ind=(v.disponibilidade||"disponivel")!=="disponivel";
-    return `<div class="dv ${c.peds.length?"":"vz"} ${ind?"indisp":""}" ${can.log()?`data-drop="${esc(v.id)}"`:""}><div class="dv-v"><span class="plate">${esc(v.matricula||v.ident)}</span>${v.virtual?` <b>${esc(v.pm.id)}</b>`:""}<span class="pc-tag">${esc(vTag(v))}</span><small>${esc([vReboques(v),mot||"sem motorista",vEmpresa(v),M.zona[vZona(v)]?.nome,ind?(v.disponibilidade==="manutencao"?"em manutenção":"indisponível"):""].filter(Boolean).join(" · "))}</small>${occBar(ocupacao(v.id,d.dia))}</div>
+    return `<div class="dv ${c.peds.length?"":"vz"} ${ind?"indisp":""}" ${can.log()?`data-drop="${esc(v.id)}"`:""}><div class="dv-v"><span class="plate">${esc(v.matricula||v.ident)}</span>${v.virtual?` <b>${esc(v.pm.id)}</b>`:""}<span class="pc-tag">${esc(vTag(v))}</span><small>${esc([vReboques(v),mot||"sem motorista",vEmpresa(v),M.zona[vZona(v)]?.nome,"Sede: "+sedeInicio(v),ind?(v.disponibilidade==="manutencao"?"em manutenção":"indisponível"):""].filter(Boolean).join(" · "))}</small>${occBar(ocupacao(v.id,d.dia))}</div>
      <div class="dv-p">${c.peds.length?c.peds.map(p=>evHtml(p,{day:1,dia:d.dia})).join(""):`<span class="muted">Sem transportes neste dia</span>`}</div></div>`;};
   const nV=vs.length,nC=vs.filter(c=>c.peds.length).length;
   const extra=(d.porAtribuir.length?`<h3 class="pc-g">Por atribuir <span class="muted">(${d.porAtribuir.length})</span></h3><div class="daylist conf">${d.porAtribuir.map(p=>evHtml(p,{day:1,dia:d.dia})).join("")}</div>`:"")
@@ -1509,7 +1511,7 @@ function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return 
   const head=`<tr><th>Viatura</th><th>Hora</th><th>Nº pedido</th><th>Obra / cliente</th><th>Pedido</th><th>Destino</th><th>Estado</th></tr>`;
   const linhas=(v,peds,lab)=>{const aberto=v&&S.plExp[v.id];const n=Math.max(peds.length,1);
     const vi=v?`<button class="pl-v" data-act="plExp" data-a="${esc(v.id)}" aria-expanded="${!!aberto}" title="Ver tipo, reboque e motorista"><span class="chev">${aberto?"▾":"▸"}</span><span class="plate">${esc(v.matricula||v.ident||"")}</span></button>${occBar(ocupacao(v.id,d.dia),true)}`:(lab?`<span class="muted">${esc(lab)}</span>`:"");
-    const det=aberto?`<tr class="det"><td colspan="${NC}"><span><small>Tipo</small> ${esc(vTag(v)||"—")}</span><span><small>Reboque</small> ${esc(vReboques(v)||"—")}</span><span><small>Motorista</small> ${esc((v.virtual?v.pm.mot:v.motorista)||"—")}</span>${v.virtual?`<span><small>Conjunto</small> ${esc(v.pm.id)}</span>`:""}</td></tr>`:"";
+    const det=aberto?`<tr class="det"><td colspan="${NC}"><span><small>Tipo</small> ${esc(vTag(v)||"—")}</span><span><small>Reboque</small> ${esc(vReboques(v)||"—")}</span><span><small>Motorista</small> ${esc((v.virtual?v.pm.mot:v.motorista)||"—")}</span><span><small>Sede de início</small> ${esc(sedeInicio(v))}</span>${v.virtual?`<span><small>Conjunto</small> ${esc(v.pm.id)}</span>`:""}</td></tr>`:"";
     if(!peds.length)return `<tr class="vazio" ${v&&can.log()?`data-drop="${esc(v.id)}"`:""}><td>${vi}</td><td colspan="${NC-1}" class="muted">Sem cargas</td></tr>${det}`;
     return peds.map((p,i)=>{const x=itemTxt(p,d.dia);return `<tr class="click" data-act="ped" data-a="${p.id}">${i===0?`<td rowspan="${n}" class="vcell" ${v&&can.log()?`data-drop="${esc(v.id)}"`:""}>${vi}</td>`:""}<td class="num">${esc(x.h)}</td><td><span class="pn">${esc(numT(p))}</span></td><td>${esc(destTxt(p))}</td><td>${esc(matDesc(p))}</td><td>${esc(p.localDescarga||"—")}</td><td>${chipE(p.estado)}</td></tr>`;}).join("")+det;};
   const sec=(t,n,body)=>`<tr class="grp"><td colspan="${NC}">${esc(t)} <span class="muted">(${n})</span></td></tr>${body}`;
