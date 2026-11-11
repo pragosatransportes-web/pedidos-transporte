@@ -891,7 +891,10 @@ function eqTxt(p){return p.equipamentoId?eqName(p.equipamentoId)+(p.variante?" �
 function chipT(p){return `<span class="chip c-idle">${esc(TIPO_SHORT[p.tipo]||"—")}</span>`;}
 const optTipos=l=>opt0(l).concat(TIPOS.map(t=>[t.k,TIPO_SHORT[t.k]]));
 function eqName(id){return M.eq[id]?.nome||"—";}
-function destTxt(p){return p.obraId?obraName(p.obraId):(p.cliente?p.cliente:"—");}
+function destTxt(p){return p.obraId?obraName(p.obraId):(p.cliente?p.cliente:(p.localDescarga&&p.localDescarga!=="PENDENTE RC"?p.localDescarga:(p.localCarga||"—")));}
+/* obra a partir do texto de um local: "código · nome", só o código, ou o nome exato */
+function obraDeTexto(txt){const n=x=>normNome(x).replace(/\s+/g," ").trim();const t=n(txt);if(!t||t===n("PENDENTE RC"))return null;const os=S.d.obras;
+  return os.find(o=>n(`${o.codigo} · ${o.nome}`)===t)||os.find(o=>{const c=n(o.codigo);return c&&(t===c||t.startsWith(c+" "));})||os.find(o=>n(o.nome)===t)||null;}
 function obraName(id){const o=M.obra[id];return o?`${o.codigo} · ${o.nome}`:"—";}
 function recursoTxt(p){const r=p.recurso||{};if(r.origem==="propria"){const v=M.via[r.viaturaId];return v?`${v.ident}${v.matricula?" · "+v.matricula:""}`:"Frota própria (sem viatura)";}
   if(r.origem==="externa")return `${M.tr[r.transportadoraId]?.nome||"Externo"}${r.matricula?" · "+r.matricula:""}`;return"—";}
@@ -1144,13 +1147,13 @@ function aplicarLocaisPadrao(F){const ol=obraLocal(M.obra[F.obraId]);const t=F.t
   else if(t==="armazem"){F.localCarga="Armazém / Pré-fabricados";F.localDescarga=ol;}
   else if(t==="fornecedor"){const f=M.forn[F.fornecedorId];F.localCarga=f?(f.morada||f.nome):"";F.localDescarga=ol;}
   else if(t==="recolha"){F.localCarga=ol;F.localDescarga="";}
-  else if(t==="maquina"){const n=F.maquinas[0];F.localCarga=(n&&PS.eqLoc[n]&&PS.eqLoc[n].loc)||"";F.localDescarga=ol;}
-  {const ob=M.obra[F.obraId],oc=ob&&ob.localizacao||"";if(oc){if(F.tipo==="recolha"){if(!F.coordCarga||F.coordCarga===(F._auto||{}).cc)F.coordCarga=oc;}else if(F.tipo&&F.tipo!=="recolha"){if(!F.coordDescarga||F.coordDescarga===(F._auto||{}).cd)F.coordDescarga=oc;}}}
+  else if(t==="maquina"){const n=F.maquinas[0];F.localCarga=(n&&PS.eqLoc[n]&&PS.eqLoc[n].loc)||"";F.localDescarga="";}
+  {const ob=M.obra[F.obraId],oc=ob&&ob.localizacao||"";if(oc){if(F.tipo==="recolha"){if(!F.coordCarga||F.coordCarga===(F._auto||{}).cc)F.coordCarga=oc;}else if(F.tipo&&F.tipo!=="recolha"&&F.tipo!=="maquina"){if(!F.coordDescarga||F.coordDescarga===(F._auto||{}).cd)F.coordDescarga=oc;}}}
   F._auto={c:F.localCarga,d:F.localDescarga,cc:F.tipo==="recolha"?F.coordCarga:"",cd:F.tipo!=="recolha"?F.coordDescarga:""};}
 function onObraChange(F){const ol=obraLocal(M.obra[F.obraId]);if(!F.tipo)return;
   if(F.tipo==="recolha"){if(!F.localCarga||F.localCarga===F._auto.c)F.localCarga=ol;}
   else if(!F.localDescarga||F.localDescarga===F._auto.d)F.localDescarga=ol;
-  {const ob=M.obra[F.obraId],oc=ob&&ob.localizacao||"";if(oc){if(F.tipo==="recolha"){if(!F.coordCarga||F.coordCarga===(F._auto||{}).cc)F.coordCarga=oc;}else if(F.tipo&&F.tipo!=="recolha"){if(!F.coordDescarga||F.coordDescarga===(F._auto||{}).cd)F.coordDescarga=oc;}}}
+  {const ob=M.obra[F.obraId],oc=ob&&ob.localizacao||"";if(oc){if(F.tipo==="recolha"){if(!F.coordCarga||F.coordCarga===(F._auto||{}).cc)F.coordCarga=oc;}else if(F.tipo&&F.tipo!=="recolha"&&F.tipo!=="maquina"){if(!F.coordDescarga||F.coordDescarga===(F._auto||{}).cd)F.coordDescarga=oc;}}}
   F._auto={c:F.localCarga,d:F.localDescarga,cc:F.tipo==="recolha"?F.coordCarga:"",cd:F.tipo!=="recolha"?F.coordDescarga:""};}
 function formAn(F){return{nums:F.maquinas,orig:parseCoords(F.coordCarga)?F.coordCarga:F.localCarga,dest:parseCoords(F.coordDescarga)?F.coordDescarga:F.localDescarga,km:F.kmManual,disp:fromInput(F.maqDisp),entregar:fromInput(F.pretendidaEm)};}
 function vNovo(){if(!can.pedido())return denied();if(!S.form)S.form=novoForm();const F=S.form;const ed=F.id?M.ped[F.id]:null;dtSync(F);if(!F.id||F.tipo)autoLogForm(F);
@@ -1161,8 +1164,8 @@ function vNovo(){if(!can.pedido())return denied();if(!S.form)S.form=novoForm();c
   const tipos=`<section class="form-sec"><header><span class="k">1</span><h3>Tipo de pedido</h3></header><div class="tipos">${TIPOS.filter(t=>t.k!=="cisterna"||can.log()||F.tipo==="cisterna").map((t,i)=>`<button class="tipo ${F.tipo===t.k?"on":""}" data-act="setTipo" data-a="${t.k}" aria-pressed="${F.tipo===t.k}"><span class="k">${i+1}</span><b>${esc(t.n)}</b><small>${esc(t.d)}</small></button>`).join("")}</div></section>`;
   if(!F.tipo)return head+tipos;
   const urg=F.tipo==="armazem"||F.tipo==="fornecedor";
-  const ident=`<section class="form-sec"><header><span class="k">2</span><h3>${F.tipo==="cisterna"?"Identificação":NOVO_LAY.includes(F.tipo)?"Identificação e responsável":"Obra e identificação"}</h3></header><div>
-   ${F.tipo==="cisterna"||NOVO_LAY.includes(F.tipo)?"":fld("form.obraId",F.tipo==="cisterna"?"Obra (se aplicável)":"Obra",{type:"select",req:F.tipo!=="cisterna",opts:[["","Selecione a obra"]].concat(obras.map(o=>[o.id,`${o.codigo} · ${o.nome}${o.ativa===false?" (inativa)":""}`]))})}
+  const ident=`<section class="form-sec"><header><span class="k">2</span><h3>${F.tipo==="cisterna"?"Identificação":NOVO_LAY.includes(F.tipo)||F.tipo==="maquina"?"Identificação e responsável":"Obra e identificação"}</h3></header><div>
+   ${F.tipo==="cisterna"||F.tipo==="maquina"||NOVO_LAY.includes(F.tipo)?"":fld("form.obraId",F.tipo==="cisterna"?"Obra (se aplicável)":"Obra",{type:"select",req:F.tipo!=="cisterna",opts:[["","Selecione a obra"]].concat(obras.map(o=>[o.id,`${o.codigo} · ${o.nome}${o.ativa===false?" (inativa)":""}`]))})}
    <div class="fld"><span>Gestores de logística responsáveis</span><div class="chips-in">${F.logisticaIds.map(id=>`<span class="chip c-info">${esc(nome(id))}<button type="button" class="btn sm ghost" style="padding:0 4px" data-act="logRem" data-a="${esc(id)}" aria-label="Remover ${esc(nome(id))}">×</button></span>`).join("")||'<span class="muted">A definir pela Logística</span>'}</div>
      ${(()=>{const o=optLogistica("").filter(x=>x[0]&&!F.logisticaIds.includes(x[0]));return o.length?`<select data-addlog="1" aria-label="Adicionar gestor de logística"><option value="">+ Adicionar gestor…</option>${o.map(x=>`<option value="${esc(x[0])}">${esc(x[1])}</option>`).join("")}</select>`:"";})()}
      <small>${F.logisticaIds.length&&!F._logMan&&F._autoLog?"Atribuído automaticamente pelo tipo de viatura. Pode acrescentar ou retirar.":(!F._autoLog&&!F.logisticaIds.length?"Sem gestor definido para este tipo de viatura (Configurações › Serviços por tipo de viatura).":"")}</small></div>
@@ -1287,7 +1290,8 @@ function maqPicker(F){if(!CAT().length)return `<div class="note warn full">A lis
      <datalist id="dl_maqloc">${[...new Set(PS.locais.map(l=>l.nome).concat(S.d.obras.filter(o=>o.ativa!==false).map(o=>`${o.codigo} · ${o.nome}`)))].map(x=>`<option value="${esc(x)}">`).join("")}</datalist><small>São criados ${sel.size} pedidos, um por máquina, todos para a obra escolhida acima.</small>`:""}</div>`:""}
   <small>* Peso e dimensões estimados pela classe da máquina. Corrigem-se no Auxílio ao planeamento de máquinas › Lista de Equipamentos.</small></div>`;}
 async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tipo;const aprov=!!F.paraAprovacao,estSub=aprov?"Pendente de aprovação":"Por agendar";
-  if(!t){F.err="Escolha o tipo de pedido.";return render();}if(NOVO_LAY.includes(t)){if(F.obraDesc&&F.obraDesc!=="__outro")F.obraId=F.obraDesc;else if(F.obraCarga&&F.obraCarga!=="__outro")F.obraId=F.obraCarga;}if(!F.obraId&&t!=="cisterna"){F.err=NOVO_LAY.includes(t)?"Selecione a obra de carga ou a obra de descarga.":"Selecione a obra.";return render();}
+  if(!t){F.err="Escolha o tipo de pedido.";return render();}if(NOVO_LAY.includes(t)){if(F.obraDesc&&F.obraDesc!=="__outro")F.obraId=F.obraDesc;else if(F.obraCarga&&F.obraCarga!=="__outro")F.obraId=F.obraCarga;}if(t==="maquina"){const ob=obraDeTexto(F.localDescarga)||obraDeTexto(F.localCarga)||(F.maqModo==="por"&&!F.id?F.maquinas.map(n=>F.maqLoc[n]||{}).map(l=>obraDeTexto(l.d)||obraDeTexto(l.o)).find(Boolean):null);if(ob)F.obraId=ob.id;else if(!F.id)F.obraId="";}
+  if(!F.obraId&&t!=="cisterna"&&t!=="maquina"){F.err=NOVO_LAY.includes(t)?"Selecione a obra de carga ou a obra de descarga.":"Selecione a obra.";return render();}
   const carga={descricao:String((t==="cisterna"&&F.cMat==="__outro"?(F.cMatOutro||F.cDesc):F.cDesc)||"").trim(),materialId:F.cMat&&F.cMat!=="__outro"?F.cMat:null,c:numOr(F.cC),l:numOr(F.cL),a:numOr(F.cA),peso:numOr(F.cPeso),volumes:numOr(F.cVol)};
   const forn=F.fornecedorId&&F.fornecedorId!=="__outro"?M.forn[F.fornecedorId]:null;const fornNome=forn?forn.nome:String(F.fornecedorNome||"").trim();
   dtSync(F);const pi=fromInput(F.periodoInicio),pf=fromInput(F.periodoFim);
@@ -1334,7 +1338,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
   const Gs=[];
   if(!F.id&&t==="viatura"){for(let q=0;q<Math.max(1,numOr(F.vQtd)||1);q++)Gs.push(F);
     F.vExtra.forEach(L=>{const G={...F,categoriaId:L.categoriaId,equipamentoId:L.equipamentoId,variante:L.variante,periodoInicio:L.ini_d?`${L.ini_d}T${L.ini_h||"00:00"}`:"",periodoFim:L.fim_d?`${L.fim_d}T${L.fim_h||"23:59"}`:"",periodoInicio_semHora:!!L.ini_d&&!L.ini_h,periodoFim_semHora:!!L.fim_d&&!L.fim_h,_logMan:false};const a=gestorAutoId({tipo:t,equipamentoId:L.equipamentoId,categoriaId:L.categoriaId});if(!F._logMan)G.logisticaIds=a?[a]:F.logisticaIds;for(let q=0;q<Math.max(1,numOr(L.qtd)||1);q++)Gs.push(G);});}
-  else if(!F.id&&t==="maquina"&&F.maqModo==="por"&&F.maquinas.length>1)F.maquinas.forEach(n=>{const l=F.maqLoc[n]||{};Gs.push({...F,maquinas:[n],localCarga:String(l.o||"").trim(),localDescarga:String(l.d||"").trim(),coordCarga:String(l.oc||""),coordDescarga:String(l.dc||""),kmManual:""});});
+  else if(!F.id&&t==="maquina"&&F.maqModo==="por"&&F.maquinas.length>1)F.maquinas.forEach(n=>{const l=F.maqLoc[n]||{};Gs.push({...F,maquinas:[n],obraId:((obraDeTexto(l.d)||obraDeTexto(l.o))||{}).id||F.obraId||"",localCarga:String(l.o||"").trim(),localDescarga:String(l.d||"").trim(),coordCarga:String(l.oc||""),coordDescarga:String(l.dc||""),kmManual:""});});
   else if(!F.id&&t==="maquina"&&F.maqModo==="por"){const n=F.maquinas[0],l=F.maqLoc[n]||{};Gs.push({...F,localCarga:String(l.o||F.localCarga||"").trim(),localDescarga:String(l.d||F.localDescarga||"").trim(),coordCarga:String(l.oc||F.coordCarga||""),coordDescarga:String(l.dc||F.coordDescarga||"")});}
   else{Gs.push(F);if(!F.id&&COMB_T.includes(t))(F.cExtra||[]).forEach(L=>{const o=M.obra[L.obraDesc];Gs.push({...F,_cx:L,obraDesc:L.obraDesc,obraId:o?o.id:F.obraId,localDescarga:o?`${o.codigo} · ${o.nome}`:String(L.localDescarga||"").trim(),coordDescarga:o?obraCoordTxt(o):String(L.coordDescarga||"").trim(),mExtra:[],...(t==="armazem"?pontoCarga(L):{})});});}
   const datas=Gs.map(G=>{const d=mk(G);d.logisticaIds=(G.logisticaIds&&G.logisticaIds.length)?[...G.logisticaIds]:(d.logisticaId?[d.logisticaId]:[]);d.logisticaId=d.logisticaIds[0]||null;if(t==="armazem"||t==="fornecedor")d.linhas=linhasMat(G);if(G._cx){const L=G._cx;d.carga={descricao:String(L.cDesc||"").trim(),materialId:L.cMat||null,c:numOr(L.cC),l:numOr(L.cL),a:numOr(L.cA),peso:numOr(L.cPeso),volumes:numOr(L.cVol)};d.linhas=[{descricao:d.carga.descricao,materialId:d.carga.materialId,peso:d.carga.peso,volumes:d.carga.volumes,c:d.carga.c,l:d.carga.l,a:d.carga.a}];}return d;});
