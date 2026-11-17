@@ -788,7 +788,11 @@ async function syncGestores(){if(!db||realRole()!=="admin"||!["utilizadores","co
 function gestoresDoPedido(p){return S.d.gestores.filter(g=>gAtivo(g)&&(gEq(g).length||gZo(g).length||gEmp(g).length)&&gestorCobrePedido(g,p));}
 function filtroGestor(p,id,comCriador){const g=M.gest&&M.gest[id];if(g)return gestorCobrePedido(g,p)||logIds(p).includes("g:"+id)||(!!g.utilizadorId&&logIds(p).includes(g.utilizadorId));return logIds(p).includes(id)||M.obra[p.obraId]?.gestorId===id||(comCriador&&p.criadoPor===id);}
 function obraVisivel(o){if(role()!=="obra")return true;return gestorUser(o)===S.me.id||o.criadoPor===S.me.id;}
-function pedidoVisivel(p){if(role()!=="obra")return true;const o=M.obra[p.obraId];return p.criadoPor===S.me.id||(o&&obraVisivel(o));}
+/* Gestor de logística com cobertura configurada (Configurações › Gestores responsáveis): só vê os pedidos e as viaturas da sua cobertura */
+function meuGestor(){if(role()!=="logistica"||!S.me.id||!S.d.gestores)return null;return S.d.gestores.find(g=>gAtivo(g)&&!gSemCob(g)&&pessoaLog(g)?.id===S.me.id)||null;}
+function pedidoVisivel(p){if(role()==="logistica"){const G=meuGestor();if(!G)return true;const via=p.recurso&&p.recurso.viaturaId;
+    return gestorCobrePedido(G,p)||logIds(p).includes(S.me.id)||logIds(p).includes("g:"+G.id)||p.criadoPor===S.me.id||(!p.equipamentoId&&!catOf(p)&&!via);}
+  if(role()!=="obra")return true;const o=M.obra[p.obraId];return p.criadoPor===S.me.id||(o&&obraVisivel(o));}
 function podeEditar(p){if(FINAIS.includes(p.estado))return false;if(["Rascunho","Devolvido para correção"].includes(p.estado))return p.criadoPor===S.me.id||can.log();if(can.log())return true;return p.criadoPor===S.me.id&&["Pendente de aprovação","Aprovado","Por agendar"].includes(p.estado);}
 const editaSemSubmeter=p=>!!p&&!["Rascunho","Devolvido para correção"].includes(p.estado);
 function podeCancelar(p){if(FINAIS.includes(p.estado))return false;if(can.log())return true;return p.criadoPor===S.me.id&&["Rascunho","Pendente de aprovação","Devolvido para correção"].includes(p.estado);}
@@ -1450,7 +1454,7 @@ function optTipoViatura(lista,todos){const L=lista||eqs("",true);const out=[["",
 const vEqs=v=>(v.equipamentos&&v.equipamentos.length)?v.equipamentos:(v.equipamentoId?[v.equipamentoId]:[]);
 function vReboques(v){return v.virtual?(v.pm.pm||""):(v.reboques||[]).map(b=>b.matricula).join(" / ");}
 function vTag(v){const e=vEqs(v).map(eqName).filter(x=>x!=="—");return e.length?e.join(" / "):(v.tipoTxt||(v.unidade==="rigido"?"Rígido":"Sem tipo definido"));}
-const unidadesPlano=()=>viaturasAll().filter(v=>v.ativo!==false&&v.unidade!=="reboque");
+const unidadesPlano=()=>{const G=meuGestor();return viaturasAll().filter(v=>v.ativo!==false&&v.unidade!=="reboque"&&(!G||gestorCobreViatura(G,v)));};
 function diasDoPedido(p){if(!p.previstoInicio)return[];const a=dayKey(p.previstoInicio),b=p.previstoFim?dayKey(p.previstoFim):a;const out=[];let k=a,g=0;while(k<=b&&g++<62){out.push(k);k=addDays(k,1);}return out;}
 function optGestores(){const gs=S.d.gestores.filter(g=>g.ativo!==false);if(gs.length)return opt0().concat(gs.map(g=>[g.id,g.nome]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));
   const ids=new Set([...S.d.utilizadores.filter(u=>u.ativo!==false).map(u=>u.id),...S.d.obras.map(o=>o.gestorId).filter(Boolean)]);wantProf([...ids]);return opt0().concat([...ids].map(i=>[i,nome(i)]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));}
