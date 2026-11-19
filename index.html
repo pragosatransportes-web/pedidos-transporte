@@ -1478,6 +1478,19 @@ function planoData(opt={}){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
   const grupos=[];vs.forEach(v=>{const k=gk(v);let g=grupos[grupos.length-1];if(!g||g.k!==k){g={k,nome:k?eqName(k):"Sem tipo de equipamento definido",cards:[]};grupos.push(g);}g.cards.push({v,peds:porVia.get(v.id)||[]});});
   return{dia,grupos,ext:f.origem==="propria"?[]:ext,porAtribuir:f.origem?[]:[...new Map(porAtribuir.map(p=>[p.id,p])).values()],cand,n:doDia.length};}
 function itemTxt(p,dia){const h=p.previstoInicio&&dayKey(p.previstoInicio)===dia?fmtT(p.previstoInicio):(p.previstoInicio?"cont.":"—");const o=M.obra[p.obraId];return{h,t:`${p.numero} · ${o?o.codigo:""} · ${matDesc(p)}${p.localDescarga?" → "+p.localDescarga:""}`};}
+/* Texto de cada transporte no PDF do plano: linha 1 = Cliente / Obra, linha 2 = Produto · Quantidade (sem nº de pedido nem código de obra) */
+function pdfItem(p,dia){const x=itemTxt(p,dia),o=M.obra[p.obraId];const nf=v=>Number(v).toLocaleString("pt-PT");
+  const cli=String((o&&o.cliente)||p.cliente||"").trim(),obra=o?o.nome:(p.localDescarga&&p.localDescarga!=="PENDENTE RC"?p.localDescarga:"");
+  const l1=[cli,obra&&obra!==cli?obra:""].filter(Boolean).join(" / ")||destTxt(p);
+  const qtd=c=>[c.quantidade!=null?`${nf(c.quantidade)} ${c.unidade||""}`.trim():"",c.peso!=null?nf(c.peso)+" t":"",c.volumes!=null?c.volumes+" vol.":""].filter(Boolean).join(" · ");
+  let l2;const ls=(p.linhas||[]).filter(l=>l.materialId||l.descricao);
+  if(ls.length)l2=ls.map(l=>[M.mat[l.materialId]?.nome||l.descricao,qtd(l)].filter(Boolean).join(" · ")).join(" + ");
+  else if(p.carga&&(p.carga.descricao||p.carga.materialId))l2=[p.carga.descricao||M.mat[p.carga.materialId]?.nome,qtd(p.carga)].filter(Boolean).join(" · ");
+  else if(p.tipo==="viatura")l2=eqName(p.equipamentoId)+(p.variante?" · "+p.variante:"");
+  else l2=matDesc(p)||"";
+  if((p.tipo==="cisterna"||p.tipo==="recolha")&&p.nCargas>1)l2+=` · ${p.nCargas} cargas`;
+  if(p.cargaTot>1)l2+=` (carga ${p.cargaIdx}/${p.cargaTot})`;
+  return{h:x.h,l1,l2:l2||"—"};}
 function planoItem(p,dia){const x=itemTxt(p,dia),o=M.obra[p.obraId];
   return `<li${can.log()&&!FINAIS.includes(p.estado)?` draggable="true" data-drag="${p.id}"`:""}><button class="pc-i ${p.prioridade==="urgente"?"urg":""} ${p.combId?"comb":""}" data-act="ped" data-a="${p.id}"><span class="t num">${esc(x.h)}</span><span class="d"><b>${esc(numT(p))}</b> ${esc(o?o.codigo+" · "+o.nome:destTxt(p))}<br><span class="x">${esc(matDesc(p)||"—")}${p.localDescarga?" → "+esc(p.localDescarga):""}</span></span>${p.estado!=="Agendado"?chipE(p.estado):chipAtr(p)}${chipComb(p,true)}</button></li>`;}
 function planoCard(v,peds,d,o={}){const lines=Math.max(5,peds.length+1);const fill=lines-peds.length;
@@ -1531,7 +1544,7 @@ function planoLista(d,tot){if(!tot&&!d.ext.length&&!d.porAtribuir.length)return 
 const EXP_EST=[["pa","Por agendar",["Pendente de aprovação","Aprovado","Por agendar"]],["ag","Agendado",["Agendado"]],["ex","Em execução",["Em execução"]],["co","Concluído",["Concluído"]]];
 function expPlanoCards(dia,est){const f=S.f.ag,keep=f.data;f.data=dia;let d;try{d=planoData({comPendentes:true});}finally{f.data=keep;}const ok=p=>est.includes(p.estado);
   const cards=[];const pa=d.porAtribuir.filter(ok),ex=d.ext.filter(ok);if(pa.length)cards.push({t1:"POR ATRIBUIR",t2:"Pedidos sem viatura",peds:pa});if(ex.length)cards.push({t1:"VEÍCULOS EXTERNOS",t2:"",peds:ex});
-  d.grupos.forEach(g=>g.cards.forEach(c=>{const v=c.v;cards.push({t1:`${v.matricula||v.ident}${v.virtual?" "+v.pm.id:""}   ${vTag(v)}`,t2:`${vReboques(v)||"—"}  -  ${(v.virtual?v.pm.mot:v.motorista)||"sem motorista"}`,peds:c.peds.filter(ok),v});}));
+  d.grupos.forEach(g=>g.cards.forEach(c=>{const v=c.v;cards.push({t1:`${v.matricula||v.ident}${v.virtual?" "+v.pm.id:""}   ${vTag(v)}`,t2:[vReboques(v),(v.virtual?v.pm.mot:v.motorista)||"sem motorista"].filter(Boolean).join("  -  "),peds:c.peds.filter(ok),v});}));
   return{dia,cards};}
 async function exportPlano(fmt,o={}){const de=o.de||S.f.ag.data,ate=o.a||de;const est=o.est||EXP_EST.flatMap(e=>e[2]);const gerado=fmtDT(nowISO());
   const dias=[];for(let k=de,g=0;k<=ate&&g<62;k=addDays(k,1),g++)dias.push(k);const um=dias.length===1;
@@ -1546,15 +1559,21 @@ async function exportPlano(fmt,o={}){const de=o.de||S.f.ag.data,ate=o.a||de;cons
       const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[11,14,22,18,22,7,13,28,40,22,14].map(w=>({wch:w}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Plano");
       await saveFile(nomeF+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})]));return;}
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");const doc=new window.jspdf.jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
-    const M0=8,cols=3,gap=3,gw=(210-2*M0-(cols-1)*gap)/cols,lines=7,lh=4.6,ch=12+lines*lh;let x,y,i,prim=true;
-    const head=dt=>{doc.setFont("helvetica","bold");doc.setFontSize(15);doc.text(`PLANO DE CARGAS     ${dt.replace(/\//g," / ")}`,M0,13);doc.setFont("helvetica","normal");doc.setFontSize(7);doc.text(doc.splitTextToSize(`Gerado em ${gerado} · ${fl}`,194)[0],M0,18);};
-    DD.forEach(D=>{const dt=fmtD(D.dia);if(!prim)doc.addPage();prim=false;head(dt);x=M0;y=22;i=0;
+    /* As fontes base do jsPDF só têm Latin-1: um único "—" ou "→" faz o texto sair espaçado e a transbordar do quadro */
+    const L1=s=>String(s==null?"":s).replace(/[→⇒]/g,"->").replace(/[–—−]/g,"-").replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,"...").replace(/[  ]/g," ").replace(/[^\x00-\xFF]/g,"");
+    const fit=(s,w)=>{s=L1(s);if(doc.getTextWidth(s)<=w)return s;while(s.length>1&&doc.getTextWidth(s+"...")>w)s=s.slice(0,-1);return s.trimEnd()+"...";};
+    const M0=8,cols=3,gap=3,gw=(210-2*M0-(cols-1)*gap)/cols,hh=11,lh=7.6,minL=5;let y,prim=true;
+    const head=dt=>{doc.setFont("helvetica","bold");doc.setFontSize(15);doc.text(L1(`PLANO DE CARGAS     ${dt.replace(/\//g," / ")}`),M0,13);doc.setFont("helvetica","normal");doc.setFontSize(7);doc.text(fit(`Gerado em ${gerado} · ${fl}`,194),M0,18);};
+    const card=(c,x,y,lines,dia)=>{const ch=hh+lines*lh;doc.setDrawColor(30);doc.setLineWidth(.3);doc.rect(x,y,gw,ch);
+      doc.setFont("helvetica","bold");doc.setFontSize(8.5);doc.text(fit(c.t1,gw-3),x+1.5,y+4.5);doc.setFont("helvetica","normal");doc.setFontSize(7.2);doc.text(fit(c.t2,gw-3),x+1.5,y+9);doc.line(x,y+hh,x+gw,y+hh);
+      for(let k=0;k<lines;k++){const y0=y+hh+lh*k;if(k<lines-1){doc.setDrawColor(185);doc.setLineWidth(.15);doc.line(x+1,y0+lh,x+gw-1,y0+lh);}const p=c.peds[k];if(!p)continue;const t=pdfItem(p,dia);
+        doc.setFont("helvetica","bold");doc.setFontSize(6.8);const hw=doc.getTextWidth("00:00")+1.5;doc.text(L1(t.h),x+1.5,y0+3.1);doc.text(fit(t.l1,gw-3-hw),x+1.5+hw,y0+3.1);
+        doc.setFont("helvetica","normal");doc.setFontSize(6.4);doc.text(fit(t.l2,gw-3-hw),x+1.5+hw,y0+6.2);}};
+    DD.forEach(D=>{const dt=fmtD(D.dia);if(!prim)doc.addPage();prim=false;head(dt);y=22;
       if(!D.cards.length){doc.setFontSize(9);doc.text("Sem transportes para os estados escolhidos.",M0,28);return;}
-      D.cards.forEach(c=>{if(y+ch>290){doc.addPage();head(dt);y=22;x=M0;i=0;}doc.setDrawColor(30);doc.setLineWidth(.3);doc.rect(x,y,gw,ch);
-      doc.setFont("helvetica","bold");doc.setFontSize(8.5);doc.text(doc.splitTextToSize(c.t1,gw-3)[0],x+1.5,y+4.5);doc.setFont("helvetica","normal");doc.setFontSize(7.2);doc.text(doc.splitTextToSize(c.t2,gw-3)[0]||"",x+1.5,y+9);doc.line(x,y+11,x+gw,y+11);
-      for(let k=0;k<lines;k++){const yy=y+11+lh*(k+1);if(k<lines-1){doc.setDrawColor(185);doc.setLineWidth(.15);doc.line(x+1,yy,x+gw-1,yy);}const p=c.peds[k];if(p){const t=itemTxt(p,D.dia);doc.setFontSize(6.6);doc.text(doc.splitTextToSize(`${t.h}  ${t.t}`,gw-3)[0],x+1.5,yy-1.3);}}
-      if(c.peds.length>lines){doc.setFontSize(6);doc.text(`+ ${c.peds.length-lines} transporte(s)`,x+gw-22,y+ch-1);}
-      i++;if(i%cols===0){x=M0;y+=ch+gap;}else x+=gw+gap;});});
+      for(let r=0;r<D.cards.length;r+=cols){const fila=D.cards.slice(r,r+cols);const lines=Math.max(minL,...fila.map(c=>c.peds.length));const ch=hh+lines*lh;
+        if(y+ch>290&&y>22){doc.addPage();head(dt);y=22;}
+        fila.forEach((c,j)=>card(c,M0+j*(gw+gap),y,lines,D.dia));y+=ch+gap;}});
     await saveFile(nomeF+".pdf",doc.output("blob"));}catch(e){console.error(e);toast("Não foi possível gerar o ficheiro.","bad");}}
 /* ========== DISTRIBUIÇÃO DE FROTA (tratores, reboques, rígidos e motoristas; ligações permitidas) ==========
    A composição vive nas fichas das viaturas (reboques e motorista), por isso o plano de cargas, o agendamento e a frota própria usam-na logo.
