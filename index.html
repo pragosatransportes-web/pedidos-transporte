@@ -1479,17 +1479,21 @@ function planoData(opt={}){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
   return{dia,grupos,ext:f.origem==="propria"?[]:ext,porAtribuir:f.origem?[]:[...new Map(porAtribuir.map(p=>[p.id,p])).values()],cand,n:doDia.length};}
 function itemTxt(p,dia){const h=p.previstoInicio&&dayKey(p.previstoInicio)===dia?fmtT(p.previstoInicio):(p.previstoInicio?"cont.":"—");const o=M.obra[p.obraId];return{h,t:`${p.numero} · ${o?o.codigo:""} · ${matDesc(p)}${p.localDescarga?" → "+p.localDescarga:""}`};}
 /* Texto de cada transporte no PDF do plano: linha 1 = Cliente / Obra, linha 2 = Produto · Quantidade (sem nº de pedido nem código de obra) */
-function pdfItem(p,dia){const x=itemTxt(p,dia),o=M.obra[p.obraId];const nf=v=>Number(v).toLocaleString("pt-PT");
+/* Cliente, obra, produto(s) e quantidade(s) de um pedido — usado nas exportações PDF e Excel do plano */
+function pedCPQ(p){const o=M.obra[p.obraId];const nf=v=>Number(v).toLocaleString("pt-PT");
   const cli=String((o&&o.cliente)||p.cliente||"").trim(),obra=o?o.nome:(p.localDescarga&&p.localDescarga!=="PENDENTE RC"?p.localDescarga:"");
-  const l1=[cli,obra&&obra!==cli?obra:""].filter(Boolean).join(" / ")||destTxt(p);
   const qtd=c=>[c.quantidade!=null?`${nf(c.quantidade)} ${c.unidade||""}`.trim():"",c.peso!=null?nf(c.peso)+" t":"",c.volumes!=null?c.volumes+" vol.":""].filter(Boolean).join(" · ");
-  let l2;const ls=(p.linhas||[]).filter(l=>l.materialId||l.descricao);
-  if(ls.length)l2=ls.map(l=>[M.mat[l.materialId]?.nome||l.descricao,qtd(l)].filter(Boolean).join(" · ")).join(" + ");
-  else if(p.carga&&(p.carga.descricao||p.carga.materialId))l2=[p.carga.descricao||M.mat[p.carga.materialId]?.nome,qtd(p.carga)].filter(Boolean).join(" · ");
-  else if(p.tipo==="viatura")l2=eqName(p.equipamentoId)+(p.variante?" · "+p.variante:"");
-  else l2=matDesc(p)||"";
-  if((p.tipo==="cisterna"||p.tipo==="recolha")&&p.nCargas>1)l2+=` · ${p.nCargas} cargas`;
-  if(p.cargaTot>1)l2+=` (carga ${p.cargaIdx}/${p.cargaTot})`;
+  let it;const ls=(p.linhas||[]).filter(l=>l.materialId||l.descricao);
+  if(ls.length)it=ls.map(l=>({p:M.mat[l.materialId]?.nome||l.descricao,q:qtd(l)}));
+  else if(p.carga&&(p.carga.descricao||p.carga.materialId))it=[{p:p.carga.descricao||M.mat[p.carga.materialId]?.nome,q:qtd(p.carga)}];
+  else if(p.tipo==="viatura")it=[{p:eqName(p.equipamentoId)+(p.variante?" · "+p.variante:""),q:""}];
+  else it=[{p:matDesc(p)||"",q:""}];
+  const extra=[(p.tipo==="cisterna"||p.tipo==="recolha")&&p.nCargas>1?`${p.nCargas} cargas`:"",p.cargaTot>1?`carga ${p.cargaIdx}/${p.cargaTot}`:""].filter(Boolean).join(" · ");
+  return{cli,obra:obra&&obra!==cli?obra:"",it,extra,
+    prod:it.map(x=>x.p).filter(Boolean).join(" + "),qtd:[it.map(x=>x.q).filter(Boolean).join(" + "),extra].filter(Boolean).join(" · ")};}
+function pdfItem(p,dia){const x=itemTxt(p,dia),c=pedCPQ(p);
+  const l1=[c.cli,c.obra].filter(Boolean).join(" / ")||destTxt(p);
+  const l2=[c.it.map(i=>[i.p,i.q].filter(Boolean).join(" · ")).join(" + "),c.extra].filter(Boolean).join(" · ");
   return{h:x.h,l1,l2:l2||"—"};}
 function planoItem(p,dia){const x=itemTxt(p,dia),o=M.obra[p.obraId];
   return `<li${can.log()&&!FINAIS.includes(p.estado)?` draggable="true" data-drag="${p.id}"`:""}><button class="pc-i ${p.prioridade==="urgente"?"urg":""} ${p.combId?"comb":""}" data-act="ped" data-a="${p.id}"><span class="t num">${esc(x.h)}</span><span class="d"><b>${esc(numT(p))}</b> ${esc(o?o.codigo+" · "+o.nome:destTxt(p))}<br><span class="x">${esc(matDesc(p)||"—")}${p.localDescarga?" → "+esc(p.localDescarga):""}</span></span>${p.estado!=="Agendado"?chipE(p.estado):chipAtr(p)}${chipComb(p,true)}</button></li>`;}
@@ -1553,10 +1557,10 @@ async function exportPlano(fmt,o={}){const de=o.de||S.f.ag.data,ate=o.a||de;cons
   const DD=dias.map(k=>expPlanoCards(k,est)).map(x=>um?x:{...x,cards:x.cards.filter(c=>c.peds.length)});
   toast("A preparar o ficheiro…");
   try{if(fmt==="xlsx"){await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
-      const aoa=[["Plano de cargas",per],["Gerado em",gerado],["Filtros",fl],[],["Data","Viatura","Tipo","Reboque","Motorista","Hora","Nº pedido","Obra","Pedido","Destino","Estado"]];
-      DD.forEach(D=>D.cards.forEach(c=>{if(!c.peds.length){aoa.push([fmtD(D.dia),c.t1,"",c.t2]);return;}c.peds.forEach(p=>{const x=itemTxt(p,D.dia);aoa.push([fmtD(D.dia),c.v?(c.v.matricula||c.v.ident):c.t1,c.v?vTag(c.v):"",c.v?vReboques(c.v):"",c.v?((c.v.virtual?c.v.pm.mot:c.v.motorista)||""):"",x.h,p.numero,destTxt(p),matDesc(p),p.localDescarga||"",p.estado]);});}));
+      const aoa=[["Plano de cargas",per],["Gerado em",gerado],["Filtros",fl],[],["Data","Viatura","Tipo","Reboque","Motorista","Hora","Cliente","Obra","Produto","Quantidade","Destino","Estado"]];
+      DD.forEach(D=>D.cards.forEach(c=>{if(!c.peds.length){aoa.push([fmtD(D.dia),c.t1,"",c.t2]);return;}c.peds.forEach(p=>{const x=itemTxt(p,D.dia),q=pedCPQ(p);aoa.push([fmtD(D.dia),c.v?(c.v.matricula||c.v.ident):c.t1,c.v?vTag(c.v):"",c.v?vReboques(c.v):"",c.v?((c.v.virtual?c.v.pm.mot:c.v.motorista)||""):"",x.h,q.cli,q.obra||(q.cli?"":destTxt(p)),q.prod,q.qtd,p.localDescarga||"",p.estado]);});}));
       if(aoa.length===5)aoa.push(["","Sem transportes para os estados e datas escolhidos."]);
-      const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[11,14,22,18,22,7,13,28,40,22,14].map(w=>({wch:w}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Plano");
+      const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[11,14,22,18,22,7,24,28,36,16,22,14].map(w=>({wch:w}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Plano");
       await saveFile(nomeF+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})]));return;}
     await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");const doc=new window.jspdf.jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
     /* As fontes base do jsPDF só têm Latin-1: um único "—" ou "→" faz o texto sair espaçado e a transbordar do quadro */
