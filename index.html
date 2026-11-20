@@ -1797,7 +1797,7 @@ const progEntTxt=e=>e.tipo==="ausente"?`Ausente${e.motivo?" ("+e.motivo+")":""}`
 function encHtml(){const ed=can.obra(),q=normNome(S.f.obras.encQ||"");const hoje=todayKey();
   const rows=encList().filter(e=>!q||normNome([e.nome,e.telemovel,e.tag,...(e.aliases||[])].join(" ")).includes(q));
   return `<div class="row" style="justify-content:space-between;align-items:flex-end"><div class="filters" style="margin:0">${fld("f.obras.encQ","Pesquisar",{live:true,ph:"nome, telemóvel, nome na programação"})}</div>
-    <div class="row">${ed?`<label class="btn" for="up_encx">Importar contactos (Excel)<input id="up_encx" type="file" accept=".xlsx,.xls" data-encx="1" hidden></label><button class="btn pri" data-act="enc" data-a="">+ Novo encarregado</button>`:""}</div></div>
+    <div class="row">${ed?`<label class="btn" for="up_encx">Importar contactos (Excel)<input id="up_encx" type="file" accept=".xlsx,.xls" data-encx="1" hidden></label>${encDup().length?`<button class="btn" data-act="encDupOpen">Juntar duplicados (${encDup().reduce((s,g)=>s+g.outros.length,0)})</button>`:""}<button class="btn pri" data-act="enc" data-a="">+ Novo encarregado</button>`:""}</div></div>
    ${(S.d.encarregados||[]).length?tbl("enc",[{k:"nome",l:"Encarregado",v:e=>`<b>${esc(e.nome)}</b>${e.ativo===false?' <span class="chip c-idle">Inativo</span>':""}${e.tag?` <small class="muted">${esc(e.tag)}</small>`:""}`},
      {k:"telemovel",l:"Telemóvel",v:e=>e.telemovel?`<span class="num">${esc(e.telemovel)}</span>`:'<span class="chip c-bad">em falta</span>',s:e=>e.telemovel||""},
      {k:"extensao",l:"Extensão",v:e=>`<span class="num">${esc(e.extensao||"—")}</span>`},
@@ -1835,20 +1835,40 @@ function impProgHtml(wrap){const I=S.impProg;const ob=progObras(I),pend=ob.filte
     <div class="tw"><table><thead><tr><th>Nome na programação</th><th>Encarregado</th></tr></thead><tbody>${I.nomes.map((x,i)=>{const sug=x.cands.map(id=>M.enc[id]).filter(Boolean);const out=encs.filter(e=>!x.cands.includes(e.id));
       return `<tr><td><b>${esc(x.nome)}</b>${x.tag?` <small class="muted">${esc(x.tag)}</small>`:""}</td><td>${fld(`impProg.nomes.${i}.enc`,"",{type:"select",opts:[["__novo","+ Criar novo encarregado"],["__ign","Não associar"]].concat(sug.map(e=>[e.id,`${e.nome}${x.cands.length>1?" (sugerido)":""}`]),out.map(e=>[e.id,e.nome]))})}</td></tr>`;}).join("")}</tbody></table></div></div></section>
    ${pend.length?`<div class="note bad">Há ${pend.length} obra(s) que não estão abertas na base de dados. Crie ou reative cada uma antes de importar.</div>`:""}${I.err?`<div class="note bad">${esc(I.err)}</div>`:""}`,
-   `<button class="btn" data-act="impProgCancel">Cancelar</button><button class="btn pri" data-act="doImpProg" ${pend.length||!nSel?"disabled":""}>Importar ${nSel} semana(s)</button>`);}
+   `<button class="btn" data-act="impProgCancel">Cancelar</button><button class="btn pri" data-act="doImpProg" ${pend.length||!nSel||I.busy?"disabled":""}>${I.busy?"A importar…":`Importar ${nSel} semana(s)`}</button>`);}
 function encFormHtml(m,wrap){return wrap(`<h2>${m.id?"Editar":"Novo"} encarregado</h2>`,`${fld("modal.f.nome","Nome",{req:true})}${fld("modal.f.telemovel","Telemóvel",{ph:"9xxxxxxxx",hint:"Usado mais tarde para avisar o encarregado por WhatsApp."})}${fld("modal.f.extensao","Extensão")}${fld("modal.f.tag","Equipa / TAG",{ph:"Ex.: MBQ, FRE, NIV"})}
    ${fld("modal.f.aliasesTxt","Nomes na programação (um por linha)",{type:"textarea",rows:3,hint:"Como o nome aparece na folha da Programação Semanal."})}${fld("modal.f.obs","Observações",{type:"textarea",rows:2})}${fld("modal.f.ativo","Ativo",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
    `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveEnc">Guardar</button>`,true);}
+/* encarregados repetidos (mesmo nome normalizado): fica o mais completo; aliases juntos; programação e avisos passam para ele */
+function encDup(){const g=groupBy(S.d.encarregados||[],e=>PROG.normEnc(e.nome)||null);const out=[];
+  g.forEach(arr=>{if(arr.length<2)return;const sc=e=>(e.telemovel?4:0)+(e.extensao?2:0)+(e.tag?1:0)+((e.aliases||[]).length?1:0);
+    const ord=[...arr].sort((a,b)=>sc(b)-sc(a)||String(a.criadoEm||"").localeCompare(String(b.criadoEm||"")));out.push({keep:ord[0],outros:ord.slice(1)});});
+  return out.sort((a,b)=>String(a.keep.nome).localeCompare(String(b.keep.nome),"pt"));}
+function encDupHtml(wrap){const G=encDup();const n=G.reduce((s,g)=>s+g.outros.length,0);
+  return wrap(`<h2>Encarregados repetidos</h2>`,G.length?`<p class="muted" style="margin-top:0">Para cada nome fica um só registo (o mais completo). Os nomes na programação, o telemóvel e a extensão em falta são completados com os dos outros, e a programação semanal passa a apontar para o registo que fica.</p>
+   <div class="tw"><table><thead><tr><th>Encarregado</th><th class="r">Registos</th><th>Fica</th></tr></thead><tbody>${G.map(g=>`<tr><td><b>${esc(g.keep.nome)}</b></td><td class="r num">${g.outros.length+1}</td><td><small>${esc(g.keep.telemovel||"sem telemóvel")}</small></td></tr>`).join("")}</tbody></table></div>
+   <div class="note">Vão ser eliminados <b>${n} registo(s) repetido(s)</b> de ${G.length} encarregado(s).</div>`:`<div class="empty">Não há encarregados repetidos.</div>`,
+   `<button class="btn" data-act="close">Cancelar</button>${G.length?`<button class="btn pri" data-act="doEncDup" ${S.modal.busy?"disabled":""}>${S.modal.busy?"A juntar…":`Juntar ${n} registo(s)`}</button>`:""}`,true);}
 /* leitura dos ficheiros (chamada pelo handler de "change") */
 async function lerXlsx(file,o){await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});
   return wb.SheetNames.map(n=>({n,rows:XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null})}));}
-async function importEncContactos(file){const fs=await lerXlsx(file);const cs=fs.flatMap(f=>PROG.parseContactos(f.rows));
+let _encImp=false;
+/* Para cada contacto: 1.º igual ao nome/alias; 2.º sugestão por nomes (só encarregados sem telemóvel, e só se não houver dois contactos a disputar o mesmo) */
+function encContactoMatch(cs,encs){const k=PROG.normEnc,out=new Map(),usados=new Set();
+  cs.forEach((c,i)=>{const e=encs.find(e=>k(e.nome)===k(c.nome)||(e.aliases||[]).some(a=>k(a)===k(c.nome)));if(e&&!usados.has(e.id)){out.set(i,e);usados.add(e.id);}});
+  const livres=encs.filter(e=>!e.telemovel&&!usados.has(e.id)),pedidos=new Map();
+  cs.forEach((c,i)=>{if(out.has(i))return;const m=PROG.matchEnc(c.nome,livres);if(m.id)(pedidos.get(m.id)||pedidos.set(m.id,[]).get(m.id)).push(i);});
+  pedidos.forEach((is,id)=>{if(is.length===1)out.set(is[0],encs.find(e=>e.id===id));});
+  return out;}
+async function importEncContactos(file){if(_encImp)return;const fs=await lerXlsx(file);const cs=fs.flatMap(f=>PROG.parseContactos(f.rows));
   if(!cs.length){toast("Não encontrei linhas com nome e telemóvel (9 dígitos) no ficheiro.","bad");return;}
-  let nN=0,nA=0;const tt=nowISO();
-  for(const c of cs){const k=PROG.normEnc(c.nome);const ex=(S.d.encarregados||[]).find(e=>PROG.normEnc(e.nome)===k||(e.aliases||[]).some(a=>PROG.normEnc(a)===k));
-    if(ex){const patch={};["telemovel","extensao","funcao"].forEach(f=>{if(c[f]&&c[f]!==ex[f])patch[f]=c[f];});if(Object.keys(patch).length){await W(()=>db.doc("encarregados/"+ex.id).update({...patch,alteradoEm:tt,alteradoPor:S.me.id}));Object.assign(ex,patch);nA++;}}
+  _encImp=true;toast("A importar contactos…");
+  try{let nN=0,nA=0;const tt=nowISO();const mt=encContactoMatch(cs,S.d.encarregados||[]);
+  for(const[ci,c]of cs.entries()){const ex=mt.get(ci);
+    if(ex){const patch={};["telemovel","extensao","funcao"].forEach(f=>{if(c[f]&&c[f]!==ex[f])patch[f]=c[f];});
+      if(PROG.normEnc(ex.nome)!==PROG.normEnc(c.nome)&&!(ex.aliases||[]).some(a=>PROG.normEnc(a)===PROG.normEnc(c.nome))){patch.aliases=[...(ex.aliases||[]),ex.nome];patch.nome=c.nome;}if(Object.keys(patch).length){await W(()=>db.doc("encarregados/"+ex.id).update({...patch,alteradoEm:tt,alteradoPor:S.me.id}));Object.assign(ex,patch);nA++;}}
     else{const ref=db.collection("encarregados").doc();const data={nome:c.nome,telemovel:c.telemovel,extensao:c.extensao,funcao:c.funcao,tag:"",aliases:[],ativo:true,obs:"",criadoEm:tt,criadoPor:S.me.id};await W(()=>ref.set(data));if(!S.d.encarregados.some(z=>z.id===ref.id))S.d.encarregados.push({id:ref.id,...data});nN++;}}
-  buildMaps();toast(`${nN} encarregado(s) novo(s), ${nA} atualizado(s).`);render();}
+  buildMaps();toast(`${nN} encarregado(s) novo(s), ${nA} atualizado(s).`);}finally{_encImp=false;render();}}
 async function importProgFile(file){const fs=await lerXlsx(file);let r=null;for(const f of fs){r=PROG.parseProgramacao(f.rows);if(r&&r.semanas.length)break;}
   if(!r||!r.semanas.length){toast("O ficheiro não tem o formato esperado: coluna ENCARREGADOS, datas por cima de cada dia e o nº da obra (#) ao lado.","bad");return;}
   const encs=S.d.encarregados||[],vistos=new Map();
@@ -2047,6 +2067,7 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
   if(m.t==="obrasDup")return obrasDupHtml(m,wrap);
   if(m.t==="impProg"&&S.impProg)return impProgHtml(wrap);
   if(m.t==="enc")return encFormHtml(m,wrap);
+  if(m.t==="encDup")return encDupHtml(wrap);
   if(m.t==="ped"){if(!P)return wrap("<h2>Pedido</h2>",`<div class="empty">Este pedido não existe ou não está visível para o seu perfil.</div>`);return wrap(`<div class="row">${pn(P)} ${chipT(P)} ${chipE(P.estado)} ${chipP(P.prioridade)}${chipX(P)}</div><h2 style="margin-top:6px">${esc(destTxt(P))}</h2>`,pedDetalhe(P),pedAcoes(P));}
   if(m.t==="decisao"){const L={aprovar:["Aprovar pedido","Aprovar","pri"],rejeitar:["Rejeitar pedido","Rejeitar","bad"],devolver:["Devolver para correção","Devolver","pri"]}[m.tipo];
     return wrap(`<h2>${L[0]} ${esc(P.numero)}</h2>`,`<p class="muted" style="margin:0">${esc(destTxt(P))} · ${esc(eqTxt(P))} · pretendido ${fmtPed(P.pretendidaEm,P.pretendidaSemHora)}</p>
@@ -2362,13 +2383,26 @@ const A={
     window.open(`https://wa.me/${waTel(x.enc.telemovel)}?text=${encodeURIComponent(waMsg(x,dia))}`,"_blank","noopener");
     const w=D.w,av={...(w.avisos||{})};av[dia]={...(av[dia]||{}),[id]:{em:nowISO(),por:S.me.id}};w.avisos=av;render();
     db.doc("programacao/"+w.id).update({avisos:av}).catch(e=>{console.error(e);toast(errMsg(e),"bad");});},
+  encDupOpen(){S.modal={t:"encDup"};render();},
+  async doEncDup(){const m=S.modal;if(!m||m.busy)return;const G=encDup();if(!G.length)return;m.busy=true;render();const tt=nowISO();
+    try{const mapa={};
+      for(const g of G){const k=g.keep,patch={};const al=new Set(k.aliases||[]);
+        g.outros.forEach(o=>{(o.aliases||[]).forEach(a=>al.add(a));["telemovel","extensao","tag","funcao","obs"].forEach(f=>{if(!k[f]&&!patch[f]&&o[f])patch[f]=o[f];});mapa[o.id]=k.id;});
+        if(al.size!==(k.aliases||[]).length)patch.aliases=[...al];
+        if(Object.keys(patch).length){await db.doc("encarregados/"+k.id).update({...patch,alteradoEm:tt,alteradoPor:S.me.id});Object.assign(k,patch);}}
+      for(const w of (S.d.programacao||[])){let mud=false;const linhas=(w.linhas||[]).map(l=>{if(l.encId&&mapa[l.encId]){mud=true;return{...l,encId:mapa[l.encId]};}return l;});
+        let avisos=w.avisos;if(avisos){avisos=Object.fromEntries(Object.entries(avisos).map(([d,x])=>[d,Object.fromEntries(Object.entries(x).map(([id,v])=>{if(mapa[id])mud=true;return[mapa[id]||id,v];}))]));}
+        if(mud){const patch={linhas};if(avisos)patch.avisos=avisos;await db.doc("programacao/"+w.id).update(patch);Object.assign(w,patch);}}
+      for(const id of Object.keys(mapa))await db.doc("encarregados/"+id).delete();
+      S.d.encarregados=(S.d.encarregados||[]).filter(e=>!mapa[e.id]);buildMaps();toast(`${Object.keys(mapa).length} registo(s) repetido(s) juntos.`);S.modal=null;render();}
+    catch(e){console.error(e);toast(errMsg(e),"bad");m.busy=false;render();}},
   impProgOpen(){if(S.impProg){S.modal={t:"impProg"};render();}},
   impProgCancel(){S.impProg=null;S.modal=null;render();},
   progCriarObra(cod){const I=S.impProg;const x=I&&progObras(I).find(o=>o.cod===cod);A.obra("");Object.assign(S.modal.f,{codigo:cod,nome:x?x.nome:""});S.modal.ret="prog";render();},
   async progReativar(id){const o=M.obra[id];if(!o)return;await W(()=>db.doc("obras/"+id).update({ativa:true,alteradoEm:nowISO(),alteradoPor:S.me.id}),`Obra ${o.codigo} reativada.`);o.ativa=true;render();},
-  async doImpProg(){const I=S.impProg;if(!I)return;const sel=I.semanas.filter(s=>I.sel[s.key]);if(!sel.length)return;
+  async doImpProg(){const I=S.impProg;if(!I||I.busy)return;const sel=I.semanas.filter(s=>I.sel[s.key]);if(!sel.length)return;
     if(progObras(I).some(o=>o.st==="nova"||o.st==="inativa")){I.err="Ainda há obras por abrir.";return render();}
-    const btn=document.querySelector("[data-act=doImpProg]");if(btn)btn.disabled=true;const tt=nowISO();
+    I.busy=true;I.err="";render();const tt=nowISO();
     try{const ids={};
       for(const x of I.nomes){if(x.enc==="__ign")continue;
         if(x.enc==="__novo"){const ref=db.collection("encarregados").doc();const data={nome:titleName(x.nome.replace(/\([^)]*\)/g,"").replace(/\s+/g," ").trim())||x.nome,telemovel:"",extensao:"",funcao:"",tag:x.tag||"",aliases:[x.nome],ativo:true,obs:"",criadoEm:tt,criadoPor:S.me.id};
@@ -2382,7 +2416,7 @@ const A={
         await db.doc("programacao/"+s.key).set({semana:s.label,inicio:s.inicio,fim:s.fim,dias:s.dias,linhas,ficheiro:I.nome,importadoEm:tt,importadoPor:S.me.id});
         const i=S.d.programacao.findIndex(x=>x.id===s.key),doc={id:s.key,semana:s.label,inicio:s.inicio,fim:s.fim,dias:s.dias,linhas,ficheiro:I.nome,importadoEm:tt,importadoPor:S.me.id};if(i>=0)S.d.programacao[i]=doc;else S.d.programacao.push(doc);}
       buildMaps();toast(`${sel.length} semana(s) importada(s).`);S.f.obras.prog=sel[sel.length-1].key;S.impProg=null;S.modal=null;render();}
-    catch(e){console.error(e);I.err=errMsg(e);if(btn)btn.disabled=false;render();}},
+    catch(e){console.error(e);I.err=errMsg(e);I.busy=false;render();}},
   obrasDup(){if(!podeEliminar())return;S.modal={t:"obrasDup",keep:{},inc:{}};render();},
   dupInc(k){const m=S.modal;if(!m||m.t!=="obrasDup")return;m.inc[k]=m.inc[k]===false;render();},
   dupKeep(a){const m=S.modal;if(!m||m.t!=="obrasDup")return;const i=a.indexOf("|");m.keep[a.slice(0,i)]=a.slice(i+1);render();},
