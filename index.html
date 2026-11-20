@@ -485,6 +485,8 @@ td.selc input,th.selc input{width:16px;height:16px;cursor:pointer}
 @media (max-width:640px){.rr-it:last-child{grid-column:auto}}
 .pg td,.pg th{vertical-align:top;min-width:130px}.pg td:first-child,.pg th:first-child{min-width:170px;position:sticky;left:0;background:var(--panel);z-index:1}
 .pg .pg-o{font-size:12px;line-height:1.3;margin:0 0 4px}.pg .hoje{background:color-mix(in srgb,var(--warn) 9%,transparent)}.pg tr.sem td{opacity:.75}
+.wa-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:10px}.wa .ph{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.wa-msg{white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.45;margin:8px 0 0;padding:8px 10px;background:var(--panel2);border-radius:8px;max-height:260px;overflow:auto}.wa.vz{opacity:.75}
 </style>
 
 <div id="app"><div class="center"><div class="panel"><h2>A carregar a plataforma…</h2><p class="muted">A ligar à base de dados partilhada e a identificar o utilizador.</p></div></div></div>
@@ -574,7 +576,7 @@ const S={sideOff:!!window.__sideOff,agSideOff:(()=>{try{return localStorage.getI
     ag:{vista:"plano",data:todayKey(),soCargas:false,empresa:"",tipo:"",obra:"",zona:"",cat:"",eq:"",gestor:"",viatura:"",origem:""},
     ext:{tab:"equipamento",de:"",ate:"",obra:"",zona:"",cat:"",eq:"",transp:"",gran:"mes",sel:""},
     rel:{tab:"equipamento",de:"",ate:"",tipo:"",zona:"",obra:"",cat:"",eq:"",gran:"mes",sel:""},
-    obras:{q:"",zona:"",estado:"ativa",tab:"obras",prog:"",encQ:""}, frota:{q:"",empresa:"",eq:"",zona:""}, cat:{tab:"viaturas",q:"",cls:""}
+    obras:{q:"",zona:"",estado:"ativa",tab:"obras",prog:"",encQ:"",waDia:""}, frota:{q:"",empresa:"",eq:"",zona:""}, cat:{tab:"viaturas",q:"",cls:""}
   },
   uq:"", uhits:[], uperfil:"logistica", cv:{perfil:"logistica"}, cvErr:""
 };
@@ -1852,6 +1854,40 @@ async function importProgFile(file){const fs=await lerXlsx(file);let r=null;for(
   const encs=S.d.encarregados||[],vistos=new Map();
   r.semanas.forEach(s=>s.linhas.forEach(l=>{if(l.sem||vistos.has(l.nome))return;const m=PROG.matchEnc(l.nome,encs);vistos.set(l.nome,{nome:l.nome,tag:l.tag,cands:m.cands,enc:m.id||"__novo"});}));
   S.impProg={nome:file.name,semanas:r.semanas,sel:Object.fromEntries(r.semanas.map(s=>[s.key,true])),nomes:[...vistos.values()]};S.modal={t:"impProg"};render();}
+/* ========== AVISOS WHATSAPP: viaturas previstas para as obras de cada encarregado (dia seguinte) ==========
+   Programação semanal (encarregado → obras do dia) × pedidos agendados nesse dia para essas obras.
+   Envio manual: o botão abre o WhatsApp com o número e o texto prontos; fica registado em programacao/{semana}.avisos[dia][encId]. */
+function waDiaDef(){let k=addDays(todayKey(),1);if(dow(k)===6)k=addDays(k,1);return k;}
+function waPedsDia(dia){return S.d.pedidos.filter(p=>["Agendado","Em execução"].includes(p.estado)&&p.obraId&&diasDoPedido(p).includes(dia)).sort((a,b)=>String(a.previstoInicio).localeCompare(String(b.previstoInicio)));}
+function waViatura(p){const r=p.recurso||{};if(origem(p)==="propria"&&r.viaturaId){const v=M.via[r.viaturaId];const mot=r.motorista||(v&&(v.virtual?v.pm.mot:v.motorista))||"";
+    const tp=v?vTag(v):"";return{mat:v?(v.matricula||v.ident):"—",tipo:/^sem tipo/i.test(tp)?"":tp,mot};}
+  if(origem(p)==="externa")return{mat:r.matricula||"",tipo:M.tr[r.transportadoraId]?.nome||"Transportadora externa",mot:r.motorista||""};
+  return{mat:"",tipo:"Viatura por atribuir",mot:""};}
+function waDados(dia){const w=(S.d.programacao||[]).find(x=>x.id===PROG.semKey(dia));const peds=waPedsDia(dia);const porObra=groupBy(peds,p=>p.obraId);
+  const encs=new Map(),cobertas=new Set();
+  ((w&&w.linhas)||[]).forEach(l=>{if(l.sem||!l.encId)return;const es=((l.dias||{})[dia]||[]).filter(e=>e.tipo==="obra");if(!es.length)return;
+    const x=encs.get(l.encId)||{enc:M.enc[l.encId],obras:[]};es.forEach(e=>{const oid=e.obraId||(obraEstado(e.codigo).o||{}).id||null;if(x.obras.some(o=>o.oid===oid&&o.cod===e.codigo))return;
+      x.obras.push({oid,cod:e.codigo,nome:oid&&M.obra[oid]?M.obra[oid].nome:e.nome,peds:oid?(porObra.get(oid)||[]):[]});if(oid)cobertas.add(oid);});encs.set(l.encId,x);});
+  const lista=[...encs.entries()].map(([id,x])=>({id,...x,n:x.obras.reduce((s,o)=>s+o.peds.length,0)})).filter(x=>x.enc).sort((a,b)=>(b.n>0)-(a.n>0)||String(a.enc.nome).localeCompare(String(b.enc.nome),"pt"));
+  const semEnc=[...porObra.entries()].filter(([oid])=>!cobertas.has(oid)).map(([oid,ps])=>({o:M.obra[oid],peds:ps}));
+  return{w,lista,semEnc,avisos:(w&&w.avisos&&w.avisos[dia])||{}};}
+function waMsg(x,dia){const nm=String(x.enc.nome||"").replace(/\([^)]*\)/g,"").trim();const DS=["segunda","terça","quarta","quinta","sexta","sábado","domingo"];
+  const ln=p=>{const v=waViatura(p),c=pedCPQ(p),h=itemTxt(p,dia).h;return `• ${h} – ${[v.mat,v.tipo?`(${v.tipo})`:""].filter(Boolean).join(" ")}${v.mot?` – ${v.mot}`:""}${c.prod?` – ${c.prod}${c.qtd?" · "+c.qtd:""}`:""}`;};
+  const blocos=x.obras.map(o=>`*${o.nome}${o.cod?` (#${o.cod})`:""}*\n${o.peds.length?o.peds.map(ln).join("\n"):"• Sem viaturas previstas."}`);
+  return `Olá ${nm},\nViaturas previstas para ${DS[dow(dia)]}, ${dia.slice(8)}/${dia.slice(5,7)}:\n\n${blocos.join("\n\n")}\n\nLogística CPSA`;}
+const waTel=t=>{const d=String(t||"").replace(/\D/g,"").replace(/^00/,"");return d.length===9?"351"+d:d;};
+function waHtml(){if(!S.f.obras.waDia)S.f.obras.waDia=waDiaDef();const dia=S.f.obras.waDia;const D=waDados(dia);
+  const head=`<div class="row" style="justify-content:space-between;align-items:flex-end"><div class="filters" style="margin:0">${fld("f.obras.waDia","Dia dos transportes",{type:"date"})}</div>
+    <p class="muted" style="margin:0;max-width:60ch">O botão abre o WhatsApp com o número e a mensagem prontos; confirme e carregue em enviar. Fica registado quem já foi avisado.</p></div>`;
+  if(!D.w)return head+`<div class="empty"><b>Não há programação semanal para ${fmtD(dia)}.</b><br>Importe a semana em “Programação semanal”.</div>`;
+  const env=Object.keys(D.avisos).length;
+  const card=x=>{const a=D.avisos[x.id],tel=x.enc.telemovel,msg=waMsg(x,dia);
+    return `<article class="panel wa ${x.n?"":"vz"}"><div class="ph"><div><b>${esc(x.enc.nome)}</b> ${tel?`<small class="num muted">${esc(tel)}</small>`:'<span class="chip c-bad">sem telemóvel</span>'}<br><small class="muted">${x.obras.map(o=>esc(o.nome)+(o.cod?" #"+esc(o.cod):"")).join(" · ")}</small></div>
+      <div class="row">${a?`<span class="chip c-ok">Enviado ${fmtT(a.em)}</span>`:""}${tel?`<button class="btn sm ${a||!x.n?"":"pri"}" data-act="waEnv" data-a="${esc(x.id)}">${a?"Reenviar":"Enviar WhatsApp"}</button>`:`<button class="btn sm" data-act="enc" data-a="${esc(x.id)}">Pôr telemóvel</button>`}</div></div>
+      <pre class="wa-msg">${esc(msg)}</pre></article>`;};
+  return head+`<p class="muted" style="margin:6px 0">${fmtD(dia)} · ${D.lista.length} encarregado(s) em obra · ${D.lista.filter(x=>x.n).length} com viaturas · ${env} avisado(s)</p>
+   ${D.semEnc.length?`<div class="note warn"><b>Obras com viaturas e sem encarregado na programação:</b> ${D.semEnc.map(s=>`${esc(s.o?s.o.codigo+" · "+s.o.nome:"Obra")} (${s.peds.length})`).join(" · ")}</div>`:""}
+   ${D.lista.length?`<div class="wa-grid">${D.lista.map(card).join("")}</div>`:`<div class="empty">Nenhum encarregado com obra atribuída neste dia.</div>`}`;}
 /* ========== obras duplicadas (mesmo código): juntar num só registo ========== */
 const OBRA_CAMPOS=[["nome",o=>o.nome],["cliente",o=>o.cliente],["morada",o=>o.morada],["coordenadas",o=>o.localizacao||o.lat!=null],["zona",o=>o.zonaId],["gestor",o=>o.gestorId],["contacto",o=>o.contacto],["início",o=>o.inicio],["fim",o=>o.fim],["observações",o=>o.obs],["DTO",o=>o.dto]];
 const obraCod=o=>String(o.codigo||"").trim().toLowerCase().replace(/\s+/g,"");
@@ -1872,8 +1908,9 @@ function obrasDupHtml(m,wrap){const G=obrasDup();if(!G.length)return wrap(`<h2>O
    `<button class="btn" data-act="close">Cancelar</button>${nObr?`<button class="btn pri" data-act="dupJuntar">Juntar ${nObr} obra(s)</button>`:""}`);}
 function vObras(){const f=S.f.obras,q=f.q.trim().toLowerCase();const os=S.d.obras.filter(o=>obraVisivel(o)&&(f.estado===""||(f.estado==="ativa")===(o.ativa!==false))&&(!q||`${o.codigo} ${o.nome} ${o.cliente||""} ${o.morada||""}`.toLowerCase().includes(q)));
   const ps=scope();const st=o=>{const a=ps.filter(p=>p.obraId===o.id);return{a,x:extStats(a)};};
-  const tabsOC=`<div class="tabs">${[["obras","Obras"],["clientes","Cisternas"],["enc","Encarregados"],["prog","Programação semanal"]].map(([k,l])=>`<button class="${(f.tab||"obras")===k?"on":""}" data-act="tab" data-a="obras|${k}">${l}</button>`).join("")}</div>`;
+  const tabsOC=`<div class="tabs">${[["obras","Obras"],["clientes","Cisternas"],["enc","Encarregados"],["prog","Programação semanal"],["wa","Avisos WhatsApp"]].map(([k,l])=>`<button class="${(f.tab||"obras")===k?"on":""}" data-act="tab" data-a="obras|${k}">${l}</button>`).join("")}</div>`;
   if(f.tab==="enc")return `<div class="phead"><div><h1>Obras/Clientes</h1><p>${(S.d.encarregados||[]).filter(e=>e.ativo!==false).length} encarregado(s) ativo(s).</p></div></div>${tabsOC}${encHtml()}`;
+  if(f.tab==="wa")return `<div class="phead"><div><h1>Obras/Clientes</h1><p>Avisar cada encarregado das viaturas previstas para as suas obras.</p></div></div>${tabsOC}${waHtml()}`;
   if(f.tab==="prog")return `<div class="phead"><div><h1>Obras/Clientes</h1><p>Distribuição semanal dos encarregados pelas obras.</p></div></div>${tabsOC}${progHtml()}`;
   if(f.tab==="clientes")return `<div class="phead"><div><h1>Obras/Clientes</h1><p>${(S.d.clientes||[]).length} cliente(s) de cisternas.</p></div></div>${tabsOC}${clientesHtml()}`;
   return `<div class="phead"><div><h1>Obras/Clientes</h1><p>${os.length} obra(s). As obras inativas não aparecem em novos pedidos, mas o histórico mantém-se.</p></div><div class="row">${podeEliminar()&&obrasDup().length?`<button class="btn" data-act="obrasDup">Obras duplicadas (${obrasDup().length})</button>`:""}${can.obra()?`<button class="btn pri" data-act="obra" data-a="">+ Nova obra</button>`:""}</div></div>${tabsOC}
@@ -2321,6 +2358,10 @@ const A={
     if(m.id)await W(()=>db.doc("encarregados/"+m.id).update(data),"Encarregado atualizado.");
     else{data.criadoEm=data.alteradoEm;data.criadoPor=S.me.id;await W(()=>db.collection("encarregados").doc().set(data),"Encarregado criado.");}
     S.modal=null;render();},
+  waEnv(id){const dia=S.f.obras.waDia;const D=waDados(dia);const x=D.lista.find(y=>y.id===id);if(!x||!x.enc.telemovel||!D.w)return;
+    window.open(`https://wa.me/${waTel(x.enc.telemovel)}?text=${encodeURIComponent(waMsg(x,dia))}`,"_blank","noopener");
+    const w=D.w,av={...(w.avisos||{})};av[dia]={...(av[dia]||{}),[id]:{em:nowISO(),por:S.me.id}};w.avisos=av;render();
+    db.doc("programacao/"+w.id).update({avisos:av}).catch(e=>{console.error(e);toast(errMsg(e),"bad");});},
   impProgOpen(){if(S.impProg){S.modal={t:"impProg"};render();}},
   impProgCancel(){S.impProg=null;S.modal=null;render();},
   progCriarObra(cod){const I=S.impProg;const x=I&&progObras(I).find(o=>o.cod===cod);A.obra("");Object.assign(S.modal.f,{codigo:cod,nome:x?x.nome:""});S.modal.ret="prog";render();},
