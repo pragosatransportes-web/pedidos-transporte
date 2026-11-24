@@ -1088,7 +1088,7 @@ function viewSearch(){const q=S.gq.trim().toLowerCase();const ps=scope().filter(
   ${pedTable("srch",ps)}${os.length?`<h2>Obras</h2>${tbl("srcho",[{k:"codigo",l:"Código",v:o=>`<span class="pn">${esc(o.codigo)}</span>`},{k:"nome",l:"Obra"}],os,{row:"obraDet"})}`:""}`;}
 
 /* ========== DASHBOARD ========== */
-function vDash(){const f=S.f.dash;const base=applyAF(scope(),f,p=>p.criadoEm);const cnt=e=>base.filter(p=>p.estado===e);
+function vDash(){const f=S.f.dash;const RS=CFG().kpiResetEm||null;const base=applyAF(scope().filter(p=>!RS||String(p.criadoEm||"")>=RS),f,p=>p.criadoEm);const cnt=e=>base.filter(p=>p.estado===e);
   const atr=base.filter(p=>emAtraso(p)),urg=base.filter(p=>p.prioridade==="urgente"&&!FINAIS.includes(p.estado)),conc=cnt("Concluído");
   const xs=extStats(base),ps=prazoStats(base);const ta=base.map(tAprov).filter(x=>x!=null),tr=base.map(tResp).filter(x=>x!=null);
   const K=(l,v,s,list,cls)=>`<button class="kpi ${list?"click":""} ${cls||""}" ${list?`data-act="drill" data-a="${drill("k"+l,l,list)}"`:""}><span class="l">${esc(l)}</span><span class="v">${v}</span><span class="s">${s||"&nbsp;"}</span></button>`;
@@ -1098,7 +1098,9 @@ function vDash(){const f=S.f.dash;const base=applyAF(scope(),f,p=>p.criadoEm);co
   const byEst=ESTADOS.map(e=>{const a=cnt(e);return{l:e,v:a.length,dk:drill("ds"+e,e,a),c:{"Concluído":"ok","Rejeitado":"bad","Cancelado":"idle"}[e]||""};}).filter(x=>x.v);
   const ks=seriesKeys(base,p=>p.criadoEm,"mes",12);const ser=[{n:"Pedidos criados",c:"var(--ink)",vals:ks.map(k=>base.filter(p=>periodKey(p.criadoEm,"mes")===k).length)}];
   const cOwn=conc.filter(p=>origem(p)==="propria"),cExt=conc.filter(p=>origem(p)==="externa");
-  return `<div class="phead"><div><p class="hello">${(()=>{const h=new Date().getHours();return h<12?"Bom dia":h<20?"Boa tarde":"Boa noite";})()}, ${esc((nome(S.me.id)||"").split(" ")[0])}</p><h1>Dashboard</h1><p>Indicadores calculados a partir dos pedidos registados${role()==="obra"?" nas suas obras":""}. O período aplica-se à data de criação do pedido.</p></div></div>
+  return `<div class="phead"><div><p class="hello">${(()=>{const h=new Date().getHours();return h<12?"Bom dia":h<20?"Boa tarde":"Boa noite";})()}, ${esc((nome(S.me.id)||"").split(" ")[0])}</p><h1>Dashboard</h1><p>Indicadores calculados a partir dos pedidos registados${role()==="obra"?" nas suas obras":""}. O período aplica-se à data de criação do pedido.${RS?` <b>A contar desde ${fmtDT(RS)}</b> (reset dos indicadores).`:""}</p></div>
+   ${role()==="admin"&&realRole()==="admin"?`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${S.kpiConf?`<span class="muted" style="font-size:13px">Os indicadores passam a contar só os pedidos criados a partir de agora. Os pedidos não são apagados.</span><button class="btn" data-act="kpiResetNo">Cancelar</button><button class="btn pri" data-act="kpiResetOk">Confirmar reset</button>`
+     :`${RS?`<button class="btn ghost" data-act="kpiUndo" title="Volta a contar todos os pedidos">Anular reset</button>`:""}<button class="btn" data-act="kpiReset" title="Os KPIs passam a contar a partir deste momento">↺ Reset aos KPIs</button>`}</div>`:""}</div>
   <div class="filters">${fld("f.dash.tipo","Tipo de pedido",{type:"select",opts:optTipos()})}${fld("f.dash.de","Criados desde",{type:"date"})}${fld("f.dash.ate","Até",{type:"date"})}${fld("f.dash.zona","Zona",{type:"select",opts:optZonas("Todas")})}${fld("f.dash.obra","Obra",{type:"select",opts:optObras("Todas",true)})}${fld("f.dash.cat","Categoria",{type:"select",opts:optCats("Todas")})}${fld("f.dash.eq","Equipamento",{type:"select",opts:optEqs(f.cat)})}${fld("f.dash.origem","Origem",{type:"select",opts:optOrig})}<button class="btn ghost" data-act="clrf" data-a="dash">Limpar</button></div>
   <div class="kpis">${K("Total de pedidos",base.length,"no período",base)}${K("Pendentes de aprovação",cnt("Pendente de aprovação").length,"",cnt("Pendente de aprovação"),cnt("Pendente de aprovação").length?"warn":"")}
   ${K("Aprovados por agendar",cnt("Por agendar").length+cnt("Aprovado").length,"",[...cnt("Por agendar"),...cnt("Aprovado")])}${K("Agendados",cnt("Agendado").length,"",cnt("Agendado"))}${K("Em execução",cnt("Em execução").length,"",cnt("Em execução"))}
@@ -2462,6 +2464,10 @@ const A={
     for(const x of sib)await savePed(x,{combId:null,combIdx:null,combTot:null,combRota:null,historico:hist(x,"Carga separada",`Deixou de estar combinada com ${sib.filter(y=>y.id!==x.id).map(y=>y.numero).join(", ")}`)});
     S.agSel=new Set();toast(`Carga separada: ${sib.map(x=>x.numero).join(", ")} voltaram a ser pedidos independentes.`);render();}, closeBg(a,t,e){if(e.target===t&&_downScrim===t){S.modal=S.modal&&S.modal.ret==="prog"&&S.impProg?{t:"impProg"}:null;render();}},
   clrq(){S.gq="";render();},
+  kpiReset(){S.kpiConf=true;render();},
+  kpiResetNo(){S.kpiConf=false;render();},
+  async kpiResetOk(){if(realRole()!=="admin")return;S.kpiConf=false;await W(()=>db.doc("cfg/geral").set({...CFG(),kpiResetEm:nowISO(),kpiResetPor:S.me.id}),"Indicadores reiniciados. A contar a partir de agora.");render();},
+  async kpiUndo(){if(realRole()!=="admin")return;await W(()=>db.doc("cfg/geral").set({...CFG(),kpiResetEm:null,kpiResetPor:null}),"Reset anulado. Os indicadores voltam a contar todos os pedidos.");render();},
   clrf(k){const keep={ped:{},dash:{},ag:{vista:S.f.ag.vista,data:S.f.ag.data},ext:{tab:S.f.ext.tab,gran:S.f.ext.gran},rel:{tab:S.f.rel.tab,gran:S.f.rel.gran}}[k];Object.keys(S.f[k]).forEach(x=>{if(!(x in keep))S.f[k][x]=x==="ids"?null:"";});Object.assign(S.f[k],keep);render();},
   clrids(){S.f.ped.ids=null;S.f.ped.idsLabel="";render();},
   drill(k){const d=S.drill[k];if(!d)return;Object.keys(S.f.ped).forEach(x=>S.f.ped[x]="");S.f.ped.ids=d.ids;S.f.ped.idsLabel=d.label;S.modal=null;location.hash="pedidos";render();},
