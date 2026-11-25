@@ -109,6 +109,7 @@ a.btn{text-decoration:none;color:inherit}
 .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
 .fld>span{font-size:12px;font-weight:600;color:var(--muted)}
 .fld em{color:var(--bad);font-style:normal}
+.sup-box{border:1px dashed var(--line);border-radius:14px;padding:10px;margin:0 0 14px;background:var(--panel2)}.sup-h{font-weight:600;font-size:13px;margin:0 0 8px}
 .pc-mot{all:unset;cursor:pointer;border-bottom:1px dashed currentColor}.pc-mot:hover,.pc-mot:focus-visible{color:var(--accent)}.aus-t td{padding:4px 8px}
 .fld.miss>span{color:var(--bad)}.fld.miss input,.fld.miss select,.fld.miss textarea{border-color:var(--bad)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 22%,transparent)!important}
 .fld input,.fld select,.fld textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);min-width:0}
@@ -1578,7 +1579,11 @@ function planoHtml(){const d=planoData();const vista=S.planoVista||window.__plan
   ${vista==="ocup"?ocupacaoHtml(d):vista==="lista"?planoLista(d,tot):`
   ${!tot&&!d.ext.length&&!d.porAtribuir.length?`<div class="empty">${unidadesPlano().length?"Nenhuma viatura ou transporte corresponde aos filtros neste dia.":"Ainda não há viaturas na frota própria. Importe as listas de viaturas em Frota própria."}</div>`:""}
   ${(d.porAtribuir.length||d.ext.length)?`<div class="pc-grid">${d.porAtribuir.length?planoCard({id:"_pa"},d.porAtribuir,d,{titulo:"Por atribuir",sub:"Transportes agendados para o dia sem viatura própria nem transportadora",cls:"pa",sem:true}):""}${d.ext.length?planoCard({id:"_ex"},d.ext,d,{titulo:"Veículos externos",sub:[...new Set(d.ext.map(p=>M.tr[p.recurso?.transportadoraId]?.nome).filter(Boolean))].join(" · "),cls:"ex",sem:true}):""}</div>`:""}
-  ${d.grupos.map(g=>`<h3 class="pc-g">${esc(g.nome)} <span class="muted">(${g.cards.length})</span></h3><div class="pc-grid">${g.cards.map(c=>planoCard(c.v,c.peds,d)).join("")}</div>`).join("")}`}`;}
+  ${d.grupos.map(g=>{const sp=g.cards.filter(c=>ehSuplente(c.v,c.peds,d.dia)),pr=g.cards.filter(c=>!sp.includes(c)),op=!!(S.supOpen&&S.supOpen[g.k||"_"]);
+    return `<h3 class="pc-g">${esc(g.nome)} <span class="muted">(${pr.length})</span>${sp.length?` <button type="button" class="btn sm ${op?"pri":""}" data-act="supTog" data-a="${esc(g.k||"_")}" aria-expanded="${op}" title="Viaturas sem motorista, indisponíveis ou com o motorista de férias/BM">Suplentes (${sp.length}) ${op?"▴":"▾"}</button>`:""}</h3>${pr.length?`<div class="pc-grid">${pr.map(c=>planoCard(c.v,c.peds,d)).join("")}</div>`:`<p class="muted" style="margin:0 0 8px">Todas as viaturas deste tipo estão nos suplentes.</p>`}
+    ${sp.length&&op?`<div class="sup-box"><div class="sup-h">Suplentes · ${esc(g.nome)} <span class="muted">sem motorista, indisponíveis ou motorista ausente</span></div><div class="pc-grid">${sp.map(c=>planoCard(c.v,c.peds,d)).join("")}</div></div>`:""}`;}).join("")}`}`;}
+/* Suplentes: viaturas sem motorista, indisponíveis (manutenção/indisponível) ou com o motorista de férias/BM nesse dia; as que já têm transportes no dia ficam no plano */
+function ehSuplente(v,peds,dia){if(peds&&peds.length)return false;const mt=vMot(v);return !mt||(v.disponibilidade||"disponivel")!=="disponivel"||!!motAus(mt,dia);}
 /* Vista Dia: todas as viaturas da frota própria agrupadas pelo gestor responsável, com os transportes do dia */
 function diaHtml(){const d=planoData({todas:true}),f=S.f.ag;
   const vs=d.grupos.flatMap(g=>g.cards);const gs=S.d.gestores.filter(g=>gAtivo(g)&&!gSemCob(g)&&(!f.gestor||g.id===f.gestor)).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt"));
@@ -2462,6 +2467,7 @@ const A={
   assignTo(pid,vid){if(!can.log()||!M.ped[pid])return;A.agendar(pid);if(!S.modal||S.modal.t!=="agendar")return;const f=S.modal.f,v=M.via[vid],P=M.ped[pid];f.origem="propria";f.viaturaId=vid;
     if(v){f.motorista=(v.virtual?v.pm.mot:v.motorista)||f.motorista||"";if(!f.equipamentoId||(P.recurso&&P.recurso.viaturaId!==vid))f.equipamentoId=vEqs(v)[0]||f.equipamentoId||"";}
     if(!f._partMan)f.partida=partidaDefault(vid);const ref=P.previstoInicio||P.periodoInicio||P.pretendidaEm;if(!ref||dayKey(ref)!==S.f.ag.data)f.inicio=S.f.ag.data+"T07:00";if(/T00:00$/.test(f.inicio||""))f.inicio=f.inicio.replace(/T00:00$/,"T07:00");f._autoFim=undefined;render();},
+  supTog(k){S.supOpen=S.supOpen||{};S.supOpen[k]=!S.supOpen[k];render();},
   todaFrota(){S.todaFrota=!S.todaFrota;try{localStorage.setItem("cpsa_todafrota",S.todaFrota?"1":"0");}catch(e){}render();},
   agSide(){S.agSideOff=!S.agSideOff;try{localStorage.setItem("cpsa_agside",S.agSideOff?"off":"on");}catch(e){}render();},
   planoVista(v){S.planoVista=v;try{localStorage.setItem("cpsa_plano",v);}catch(e){}render();}, notif(){S.notifOpen=!S.notifOpen;render();},
