@@ -586,7 +586,7 @@ const S={todaFrota:(()=>{try{return localStorage.getItem("cpsa_todafrota")==="1"
     ag:{vista:"plano",data:todayKey(),soCargas:false,q:"",obraQ:"",viaQ:"",empresa:"",tipo:"",obra:"",zona:"",cat:"",eq:"",gestor:"",viatura:"",origem:""},
     ext:{tab:"equipamento",de:"",ate:"",obra:"",zona:"",cat:"",eq:"",transp:"",gran:"mes",sel:""},
     rel:{tab:"equipamento",de:"",ate:"",tipo:"",zona:"",obra:"",cat:"",eq:"",gran:"mes",sel:""},
-    obras:{q:"",zona:"",estado:"ativa",tab:"obras",prog:"",encQ:"",waDia:""}, frota:{q:"",empresa:"",eq:"",zona:""}, cat:{tab:"viaturas",q:"",cls:""}
+    obras:{q:"",zona:"",estado:"ativa",tab:"obras",prog:"",encQ:"",waDia:""}, frota:{q:"",empresa:"",eq:"",zona:"",eixos:""}, cat:{tab:"viaturas",q:"",cls:""}
   },
   uq:"", uhits:[], uperfil:"logistica", cv:{perfil:"logistica"}, cvErr:""
 };
@@ -939,6 +939,7 @@ function conflitos(){const cfg=CFG(),now=Date.now(),out=[];const ps=scope();
   act.forEach(p=>{const r=p.recurso||{};
     {const nm=r.motorista||(r.viaturaId?vMot(M.via[r.viaturaId]):"");if(nm){for(const k of diasDoPedido(p)){const a=motAus(nm,k);if(a){out.push({key:`aus_${p.id}`,tipo:"Motorista de férias / BM",ped:[p],txt:`${nm}: ${ausLab(a.tipo)} de ${fmtD(a.ini)} a ${fmtD(a.fim||a.ini)}`});break;}}}}
     if(r.origem==="propria"&&r.viaturaId){const v=M.via[r.viaturaId];if(v&&(v.disponibilidade||"disponivel")!=="disponivel"&&p.estado==="Agendado")out.push({key:`ind_${p.id}`,tipo:"Viatura ou equipamento indisponível",ped:[p],txt:`${v.ident}: ${v.disponibilidade==="manutencao"?"em manutenção":"indisponível"}`});
+      if(v&&eixosAlerta(p,v))out.push({key:`eix_${p.id}`,tipo:"Pedido de 3 eixos em viatura de 4 eixos",ped:[p],txt:eixosAlerta(p,v)});
       if(v&&v.equipamentoId&&v.equipamentoId!==p.equipamentoId)out.push({key:`teq_${p.id}`,tipo:"Tipo de equipamento diferente do pedido",ped:[p],txt:`${v.ident} é ${eqName(v.equipamentoId)}; pedido de ${eqName(p.equipamentoId)}`});}
     if(!(r.origem==="propria"&&r.viaturaId)&&!(r.origem==="externa"&&(r.transportadoraId||r.matricula)))out.push({key:`sr_${p.id}`,tipo:"Sem viatura ou equipamento atribuído",ped:[p],txt:r.origem==="externa"?"Transportadora por indicar":"Viatura por indicar"});});
   ps.filter(p=>["Pendente de aprovação","Aprovado","Por agendar","Devolvido para correção"].includes(p.estado)&&p.pretendidaEm&&Date.parse(p.pretendidaEm)-now<cfg.alertaH*3600000)
@@ -1516,7 +1517,13 @@ function eqIn(val,id){if(!val)return true;if(String(val).startsWith("cat:"))retu
 function optTipoViatura(lista,todos){const L=lista||eqs("",true);const out=[["",todos||"Todos"]];cats(true).forEach(c=>{const es=L.filter(e=>e.categoriaId===c.id);if(!es.length)return;out.push(["cat:"+c.id,`${c.nome} (todos)`]);es.forEach(e=>out.push([e.id,`   · ${e.nome}`]));});return out;}
 const vEqs=v=>(v.equipamentos&&v.equipamentos.length)?v.equipamentos:(v.equipamentoId?[v.equipamentoId]:[]);
 function vReboques(v){return v.virtual?(v.pm.pm||""):(v.reboques||[]).map(b=>b.matricula).join(" / ");}
-function vTag(v){const e=vEqs(v).map(eqName).filter(x=>x!=="—");return e.length?e.join(" / "):(v.tipoTxt||(v.unidade==="rigido"?"Rígido":"Sem tipo definido"));}
+/* Eixos: viaturas marcadas com 3 ou 4 eixos (Frota própria); o pedido lê-os da variante ("3 eixos" / "4 eixos").
+   Pedido de 4 eixos pode ir para viatura de 3 eixos; pedido de 3 eixos numa viatura de 4 eixos dá alerta. */
+const vEixos=v=>v&&(v.eixos===3||v.eixos===4)?v.eixos:null;
+function pedEixos(p){const m=String(p&&p.variante||"").match(/(\d)\s*eixo/i);return m?+m[1]:null;}
+function eixosAlerta(p,v){return pedEixos(p)===3&&vEixos(v)===4?`Pedido de 3 eixos atribuído a ${v.matricula||v.ident}, que é de 4 eixos.`:"";}
+function vTag(v){return vTag0(v)+(vEixos(v)?` · ${vEixos(v)} eixos`:"");}
+function vTag0(v){const e=vEqs(v).map(eqName).filter(x=>x!=="—");return e.length?e.join(" / "):(v.tipoTxt||(v.unidade==="rigido"?"Rígido":"Sem tipo definido"));}
 const unidadesPlano=()=>{const G=S.todaFrota?null:meuGestor();return viaturasAll().filter(v=>v.ativo!==false&&v.unidade!=="reboque"&&(!G||gestorCobreViatura(G,v)));};
 function diasDoPedido(p){if(!p.previstoInicio)return[];const a=dayKey(p.previstoInicio),b=p.previstoFim?dayKey(p.previstoFim):a;const out=[];let k=a,g=0;while(k<=b&&g++<62){out.push(k);k=addDays(k,1);}return out;}
 function optGestores(){const gs=S.d.gestores.filter(g=>g.ativo!==false);if(gs.length)return opt0().concat(gs.map(g=>[g.id,g.nome]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));
@@ -1803,7 +1810,7 @@ function vFrota(){if(role()==="obra")return denied();const ff=S.f.frota;const co
   const use=id=>conc.filter(p=>p.recurso?.viaturaId===id).length;const next=id=>scope().filter(p=>p.estado==="Agendado"&&p.recurso?.viaturaId===id&&p.previstoInicio>=nowISO()).sort((a,b)=>a.previstoInicio.localeCompare(b.previstoInicio))[0];
   const DISP={disponivel:["Disponível","c-ok"],indisponivel:["Indisponível","c-bad"],manutencao:["Em manutenção","c-warn"]};
   const q=ff.q.trim().toLowerCase();const reais=S.d.viaturas.filter(v=>v.unidade!=="reboque");const _atr=new Set(reais.flatMap(v=>(v.reboques||[]).map(b=>plateKey(b.matricula))));const soltos=S.d.viaturas.filter(v=>v.unidade==="reboque"&&v.ativo!==false&&!_atr.has(plateKey(v.matricula)));
-  const vs=reais.filter(v=>(!ff.empresa||v.empresa===ff.empresa)&&(!ff.zona||(ff.zona==="_sem"?!v.zonaId:v.zonaId===ff.zona))&&(!ff.eq||(ff.eq!=="_sem"&&vEqs(v).some(e=>eqIn(ff.eq,e)))||(ff.eq==="_sem"&&!vEqs(v).length))&&(!q||[v.matricula,v.ident,vReboques(v),v.motorista,v.sede,v.tipoTxt].join(" ").toLowerCase().qInc(q)));
+  const vs=reais.filter(v=>(!ff.empresa||v.empresa===ff.empresa)&&(!ff.zona||(ff.zona==="_sem"?!v.zonaId:v.zonaId===ff.zona))&&(!ff.eq||(ff.eq!=="_sem"&&vEqs(v).some(e=>eqIn(ff.eq,e)))||(ff.eq==="_sem"&&!vEqs(v).length))&&(!ff.eixos||(ff.eixos==="_sem"?!vEixos(v):vEixos(v)===+ff.eixos))&&(!q||[v.matricula,v.ident,vReboques(v),v.motorista,v.sede,v.tipoTxt].join(" ").toLowerCase().qInc(q)));
   const pmT=PS.pm.length?`<div class="panel"><div class="ph"><h3>Conjuntos porta-máquinas (${PS.pm.length})</h3><a class="btn sm" href="#planeamento">Editar no Auxílio ao planeamento de máquinas</a></div>
    ${tbl("pmc",[{k:"id",l:"Conjunto",v:p=>`<b>${esc(p.id)}</b>`},{k:"trator",l:"Trator",v:p=>p.trator?`<span class="plate">${esc(p.trator)}</span>`:"—"},{k:"pm",l:"Porta-máquinas",v:p=>esc(p.pm||"—")},{k:"mot",l:"Motorista"},{k:"zona",l:"Zona",v:p=>{const z=(CFG().pmZonas||{})[p.id];return `${z?esc(M.zona[z]?.nome||"—"):'<span class="muted">Por definir</span>'}${realRole()==="admin"?` <button class="btn sm ghost" data-act="pmZona" data-a="${esc(p.id)}">Alterar</button>`:""}`;},nosort:true},
     {k:"cap",l:"Capacidade útil",cls:"r",v:p=>`<span class="num">${tn(p.cap)} t</span>`},{k:"comp",l:"Comp. de carga",cls:"r",v:p=>`<span class="num">${fmtM(pmLen(p))}</span>`,s:p=>pmLen(p)},
@@ -1814,9 +1821,10 @@ function vFrota(){if(role()==="obra")return denied();const ff=S.f.frota;const co
    ${can.defs()?`<div class="row"><label class="btn" for="up_lista">Importar lista de viaturas (Excel)<input id="up_lista" type="file" accept=".xlsx,.xls" data-lista="1" hidden></label><button class="btn pri" data-act="viatura" data-a="">+ Nova viatura</button></div>`:""}</div>
   ${semEq&&can.defs()?`<div class="note warn">${semEq} viatura(s) sem tipo de equipamento definido. Defina-o para aparecerem no grupo certo do plano de cargas e no filtro por tipo de equipamento. <button class="btn sm" data-act="frotaSemEq">Mostrar</button></div>`:""}
   ${pmT}<div class="panel"><div class="ph"><h3>Viaturas e conjuntos (${vs.length})</h3></div>
-  <div class="filters">${fld("f.frota.q","Pesquisar",{live:true,ph:"matrícula, reboque, motorista, sede"})}${fld("f.frota.empresa","Empresa",{type:"select",opts:[["","Todas"],["CPSA","CPSA"],["PTSA","Pragosa Transportes"]]})}${fld("f.frota.zona","Zona operacional",{type:"select",opts:[["","Todas"],["_sem","Por definir"]].concat(zonas(true).map(z=>[z.id,z.nome]))})}${fld("f.frota.eq","Tipo de equipamento",{type:"select",opts:optTipoViatura().concat([["_sem","Sem tipo definido"]])})}</div>
+  <div class="filters">${fld("f.frota.q","Pesquisar",{live:true,ph:"matrícula, reboque, motorista, sede"})}${fld("f.frota.empresa","Empresa",{type:"select",opts:[["","Todas"],["CPSA","CPSA"],["PTSA","Pragosa Transportes"]]})}${fld("f.frota.zona","Zona operacional",{type:"select",opts:[["","Todas"],["_sem","Por definir"]].concat(zonas(true).map(z=>[z.id,z.nome]))})}${fld("f.frota.eq","Tipo de equipamento",{type:"select",opts:optTipoViatura().concat([["_sem","Sem tipo definido"]])})}${fld("f.frota.eixos","Eixos",{type:"select",opts:[["","Todos"],["3","3 eixos"],["4","4 eixos"],["_sem","Por definir"]]})}</div>
   ${reais.length?tbl("via",[{k:"empresa",l:"Empresa",v:v=>esc(v.empresa==="PTSA"?"PT":v.empresa||"—")},{k:"matricula",l:"Trator / viatura",v:v=>`<span class="plate">${esc(v.matricula||v.ident)}</span>${v.ativo===false?' <span class="chip c-idle">Desativada</span>':""}${v.suplente?' <span class="chip c-idle">Suplente</span>':""}`,s:v=>v.matricula||v.ident},
    {k:"reb",l:"Reboque(s)",v:v=>esc(vReboques(v)||(v.unidade==="rigido"?"Rígido":"—")),s:v=>vReboques(v)},{k:"eq",l:"Tipo de equipamento",v:v=>vEqs(v).length?esc(vEqs(v).map(eqName).join(" / ")):`<span class="muted">${esc(v.tipoTxt||"Por definir")}</span>`,s:v=>vTag(v)},
+   {k:"eixos",l:"Eixos",v:v=>can.defs()?`<div class="seg" role="group" aria-label="Eixos de ${esc(v.matricula||v.ident)}">${[3,4].map(n=>`<button type="button" class="${vEixos(v)===n?"on":""}" data-act="setEixos" data-a="${esc(v.id)}|${n}" aria-pressed="${vEixos(v)===n}">${n}</button>`).join("")}</div>`:(vEixos(v)?vEixos(v)+" eixos":'<span class="muted">—</span>'),s:v=>vEixos(v)||0},
    {k:"motorista",l:"Motorista",v:v=>v.motorista?esc(v.motorista):'<span class="muted">sem motorista</span>'},{k:"contacto",l:"Contacto",v:v=>`<span class="num">${esc(v.contacto||"")}</span>`},{k:"zona",l:"Zona",v:v=>vZona(v)?esc(M.zona[vZona(v)]?.nome||"—"):'<span class="muted">Por definir</span>',s:v=>M.zona[vZona(v)]?.nome||""},{k:"sede",l:"Sede"},
    {k:"disponibilidade",l:"Disponibilidade",v:v=>{const d=DISP[v.disponibilidade||"disponivel"];return `<span class="chip ${d[1]}">${d[0]}</span>`;}},{k:"uso",l:"Concluídos",cls:"r",v:v=>`<span class="num">${use(v.id)}</span>`,s:v=>use(v.id)},
    {k:"prox",l:"Próximo agendado",nosort:true,v:v=>{const p=next(v.id);return p?`${esc(p.numero)} · ${fmtDT(p.previstoInicio)}`:"—";}}],vs,{row:can.defs()?"viatura":null,k:"empresa",empty:"Nenhuma viatura corresponde aos filtros."})
@@ -2219,6 +2227,7 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
   if(m.t==="viatura")return wrap(`<h2>${m.id?"Editar viatura":"Nova viatura"}</h2>`,`<div class="grid g2">${fld("modal.f.matricula","Matrícula do trator ou viatura",{req:true,ph:"AA-00-AA"})}${fld("modal.f.unidade","Unidade",{type:"select",opts:[["conjunto","Trator + reboque"],["trator","Trator"],["rigido","Rígido"],["reboque","Reboque sem trator"]]})}
      ${fld("modal.f.empresa","Empresa",{type:"select",opts:[["CPSA","CPSA"],["PTSA","Pragosa Transportes"]]})}${fld("modal.f.sede","Sede do conjunto")}</div>
      ${fld("modal.f.reboquesTxt","Reboques (um por linha: matrícula · tipo)",{type:"textarea",rows:3,ph:"L-174917 · Cisterna Cimento"})}
+     ${fld("modal.f.eixos","Nº de eixos",{type:"select",opts:[["","—"],["3","3 eixos"],["4","4 eixos"]],hint:"Basculantes: um pedido de 4 eixos pode ir para uma viatura de 3 eixos; um pedido de 3 eixos numa viatura de 4 eixos dá alerta."})}
      ${fld("modal.f.equipamentoId","Tipo de equipamento principal",{type:"select",opts:[["","Por definir"]].concat(eqs("",true).map(e=>[e.id,`${M.cat[e.categoriaId]?.nome||""} · ${e.nome}`])),hint:m.f.tipoTxt?`Na lista importada: ${m.f.tipoTxt}`:"Define o grupo da viatura no plano de cargas."})}
      <div class="grid g2">${fld("modal.f.zonaId","Zona operacional",{type:"select",opts:[["","Por definir"]].concat(zonas().map(z=>[z.id,z.nome]))})}${fld("modal.f.motorista","Motorista responsável")}${fld("modal.f.contacto","Contacto")}${fld("modal.f.disponibilidade","Disponibilidade",{type:"select",opts:[["disponivel","Disponível"],["indisponivel","Indisponível"],["manutencao","Em manutenção"]]})}<div class="fld"><span>&nbsp;</span>${fld("modal.f.suplente","Suplente",{type:"check"})}</div></div>
      ${fld("modal.f.obs","Observações operacionais",{type:"textarea"})}${fld("modal.f.ativo","Ativa",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
@@ -2368,6 +2377,7 @@ function agendarBody(P,m){const F=m.f;const eqSel=F.equipamentoId||"";
   if(ini&&fim&&fim<=ini)warn.push("O fim previsto é anterior ao início.");if(isV&&F.chegada&&F.fim&&fromInput(F.fim)<fromInput(F.chegada))warn.push("O fim do trabalho em obra é anterior à chegada prevista à obra.");if(podeReg&&F.regressar&&RG&&RG.incompleta)warn.push(`Não foi possível calcular o regresso: ${!RG.D?"falta localizar a obra":"falta a localização da sede "+F.regSede}.`);
   if(F.origem==="propria"&&F.viaturaId&&ini){const v=M.via[F.viaturaId];
     if(v&&(v.disponibilidade||"disponivel")!=="disponivel")warn.push(`${v.ident} está ${v.disponibilidade==="manutencao"?"em manutenção":"indisponível"}.`);
+    if(v&&eixosAlerta(P,v))warn.push("⚠ "+eixosAlerta(P,v));
     if(v&&v.equipamentoId&&eqSel&&v.equipamentoId!==eqSel)warn.push(`${v.ident} é ${eqName(v.equipamentoId)}; o equipamento a utilizar é ${eqName(eqSel)}.`);
     if(v&&v.pm&&A&&A.rank){const r=A.rank.find(x=>x.pm.id===v.pm.id);if(r&&!r.fits)warn.push(`${v.pm.id} não leva esta carga numa só viagem: ${r.why.join(" · ")}.`);}
     const a0=Date.parse(ini),a1=fim?Date.parse(fim):a0+dur;
@@ -2468,6 +2478,8 @@ const A={
     if(v){f.motorista=(v.virtual?v.pm.mot:v.motorista)||f.motorista||"";if(!f.equipamentoId||(P.recurso&&P.recurso.viaturaId!==vid))f.equipamentoId=vEqs(v)[0]||f.equipamentoId||"";}
     if(!f._partMan)f.partida=partidaDefault(vid);const ref=P.previstoInicio||P.periodoInicio||P.pretendidaEm;if(!ref||dayKey(ref)!==S.f.ag.data)f.inicio=S.f.ag.data+"T07:00";if(/T00:00$/.test(f.inicio||""))f.inicio=f.inicio.replace(/T00:00$/,"T07:00");f._autoFim=undefined;render();},
   supTog(k){S.supOpen=S.supOpen||{};S.supOpen[k]=!S.supOpen[k];render();},
+  async setEixos(a){if(!can.defs())return;const[id,n]=a.split("|");const v=M.via[id];if(!v)return;const nv=vEixos(v)===+n?null:+n;
+    await W(()=>db.doc("viaturas/"+id).update({eixos:nv,alteradoEm:nowISO(),alteradoPor:S.me.id}),nv?`${v.matricula||v.ident}: ${nv} eixos.`:`${v.matricula||v.ident}: eixos por definir.`);v.eixos=nv;render();},
   todaFrota(){S.todaFrota=!S.todaFrota;try{localStorage.setItem("cpsa_todafrota",S.todaFrota?"1":"0");}catch(e){}render();},
   agSide(){S.agSideOff=!S.agSideOff;try{localStorage.setItem("cpsa_agside",S.agSideOff?"off":"on");}catch(e){}render();},
   planoVista(v){S.planoVista=v;try{localStorage.setItem("cpsa_plano",v);}catch(e){}render();}, notif(){S.notifOpen=!S.notifOpen;render();},
@@ -2805,7 +2817,7 @@ const A={
     let data;
     if(col==="viaturas"){const old=(m.id&&M.via[m.id]?.reboques)||[];const reb=String(f.reboquesTxt||"").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const pr=l.split(/\s*[·|;]\s*|\s+-\s+/);const o=old.find(b=>plateKey(b.matricula)===plateKey(pr[0]));return{...(o||{}),matricula:normPlate(pr[0]),tipo:pr.slice(1).join(" ").trim()||(o?o.tipo||"":"")};});
       const mat=normPlate(f.matricula||f.ident);const eqL=[...new Set([f.equipamentoId,...reb.map(b=>eqDeTipo(b.tipo))].filter(e=>e&&M.eq[e]))];
-      data={ident:mat,matricula:mat,unidade:f.unidade||"conjunto",empresa:f.empresa||"CPSA",sede:f.sede||"",zonaId:f.zonaId||null,reboques:reb,equipamentoId:f.equipamentoId||eqL[0]||null,equipamentos:eqL,disponibilidade:f.disponibilidade||"disponivel",motorista:f.motorista||"",contacto:String(f.contacto||""),suplente:!!f.suplente,obs:f.obs||"",ativo:!!f.ativo};}
+      data={ident:mat,matricula:mat,unidade:f.unidade||"conjunto",empresa:f.empresa||"CPSA",sede:f.sede||"",zonaId:f.zonaId||null,reboques:reb,equipamentoId:f.equipamentoId||eqL[0]||null,equipamentos:eqL,eixos:f.eixos?+f.eixos:null,disponibilidade:f.disponibilidade||"disponivel",motorista:f.motorista||"",contacto:String(f.contacto||""),suplente:!!f.suplente,obs:f.obs||"",ativo:!!f.ativo};}
     else if(col==="transportadoras")data={nome:f.nome.trim(),nif:f.nif||"",contacto:f.contacto||"",obs:f.obs||"",ativo:!!f.ativo,equipamentos:Object.keys(f.eqs||{}).filter(k=>f.eqs[k])};
     else if(col==="gestores"){if(!m.id){m.err="Os gestores criam-se em Utilizadores, com o perfil Gestor de logística.";return render();}const on=o=>Object.keys(o||{}).filter(k=>o[k]);data={nome:f.nome.trim(),funcao:f.funcao||"",empresas:on(f.emp),equipamentos:on(f.eq),zonas:on(f.zo),zonaId:null,contacto:String(f.contacto||""),email:f.email||"",utilizadorId:f.utilizadorId||null,conviteId:f.conviteId||null,ativo:!!f.ativo};}
     else if(col==="clientes"){if(!m.id&&(S.d.clientes||[]).some(c=>normNome(c.nome)===normNome(f.nome))){m.err="Já existe um cliente com este nome.";return render();}data={nome:f.nome.trim(),contacto:f.contacto||"",obs:f.obs||"",ativo:!!f.ativo,materiais:Object.keys(f.mat||{}).filter(k=>f.mat[k])};}
