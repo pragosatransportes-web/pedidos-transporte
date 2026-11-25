@@ -1853,7 +1853,7 @@ function progHtml(){const ed=can.obra(),ws=progSemanas(),w=progSel();
   return bar+`<p class="muted" style="margin:4px 0 8px">${esc(w.semana)} · ${linhas.filter(l=>!l.sem).length} encarregado(s) · importado ${w.importadoEm?fmtDT(w.importadoEm):"—"}${w.importadoPor?" por "+esc(nome(w.importadoPor)):""}${w.ficheiro?" · "+esc(w.ficheiro):""}</p>
    <div class="tw"><table class="pg"><thead><tr><th>Encarregado</th>${dias.map(k=>`<th class="${k===hoje?"hoje":""}">${DIAS[dow(k)]} ${k.slice(8)}/${k.slice(5,7)}</th>`).join("")}</tr></thead>
    <tbody>${linhas.map(l=>`<tr class="${l.sem?"sem":""}"><td>${nomeCel(l)}</td>${dias.map(k=>`<td class="${k===hoje?"hoje":""}">${cel((l.dias||{})[k])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;}
-/* revisão antes de gravar: semanas, obras por abrir (bloqueia) e nomes por associar */
+/* revisão antes de gravar: semanas, obras por abrir (aviso, não bloqueia) e nomes por associar */
 const ST_ORD={nova:0,inativa:1,semcod:2,ok:3};
 function progObras(I){const m=new Map();I.semanas.filter(s=>I.sel[s.key]).forEach(s=>s.linhas.forEach(l=>Object.values(l.dias).flat().forEach(e=>{if(e.tipo!=="obra")return;const k=e.codigo||("?"+e.nome);
   if(!m.has(k))m.set(k,{cod:e.codigo,nome:e.nome,n:0});m.get(k).n++;})));
@@ -1869,8 +1869,8 @@ function impProgHtml(wrap){const I=S.impProg;const ob=progObras(I),pend=ob.filte
     <p class="muted" style="margin:0 0 6px">Os nomes da programação são associados aos encarregados da base. O nome da folha fica guardado na ficha, para ser reconhecido nas próximas semanas.</p>
     <div class="tw"><table><thead><tr><th>Nome na programação</th><th>Encarregado</th></tr></thead><tbody>${I.nomes.map((x,i)=>{const sug=x.cands.map(id=>M.enc[id]).filter(Boolean);const out=encs.filter(e=>!x.cands.includes(e.id));
       return `<tr><td><b>${esc(x.nome)}</b>${x.tag?` <small class="muted">${esc(x.tag)}</small>`:""}</td><td>${fld(`impProg.nomes.${i}.enc`,"",{type:"select",opts:[["__novo","+ Criar novo encarregado"],["__ign","Não associar"]].concat(sug.map(e=>[e.id,`${e.nome}${x.cands.length>1?" (sugerido)":""}`]),out.map(e=>[e.id,e.nome]))})}</td></tr>`;}).join("")}</tbody></table></div></div></section>
-   ${pend.length?`<div class="note bad">Há ${pend.length} obra(s) que não estão abertas na base de dados. Crie ou reative cada uma antes de importar.</div>`:""}${I.err?`<div class="note bad">${esc(I.err)}</div>`:""}`,
-   `<button class="btn" data-act="impProgCancel">Cancelar</button><button class="btn pri" data-act="doImpProg" ${pend.length||!nSel||I.busy?"disabled":""}>${I.busy?"A importar…":`Importar ${nSel} semana(s)`}</button>`);}
+   ${pend.length?`<div class="note warn">Há ${pend.length} obra(s) que não estão abertas na base de dados. Pode criá-las ou reativá-las agora, ou importar assim mesmo — ficam marcadas como «obra por abrir» na programação.</div>`:""}${I.err?`<div class="note bad">${esc(I.err)}</div>`:""}`,
+   `<button class="btn" data-act="impProgCancel">Cancelar</button><button class="btn pri" data-act="doImpProg" ${!nSel||I.busy?"disabled":""}>${I.busy?"A importar…":`Importar ${nSel} semana(s)`}</button>`);}
 function encFormHtml(m,wrap){return wrap(`<h2>${m.id?"Editar":"Novo"} encarregado</h2>`,`${fld("modal.f.nome","Nome",{req:true})}${fld("modal.f.telemovel","Telemóvel",{ph:"9xxxxxxxx",hint:"Usado mais tarde para avisar o encarregado por WhatsApp."})}${fld("modal.f.extensao","Extensão")}${fld("modal.f.tag","Equipa / TAG",{ph:"Ex.: MBQ, FRE, NIV"})}
    ${fld("modal.f.aliasesTxt","Nomes na programação (um por linha)",{type:"textarea",rows:3,hint:"Como o nome aparece na folha da Programação Semanal."})}${fld("modal.f.obs","Observações",{type:"textarea",rows:2})}${fld("modal.f.ativo","Ativo",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
    `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveEnc">Guardar</button>`,true);}
@@ -2438,7 +2438,6 @@ const A={
   progCriarObra(cod){const I=S.impProg;const x=I&&progObras(I).find(o=>o.cod===cod);A.obra("");Object.assign(S.modal.f,{codigo:cod,nome:x?x.nome:""});S.modal.ret="prog";render();},
   async progReativar(id){const o=M.obra[id];if(!o)return;await W(()=>db.doc("obras/"+id).update({ativa:true,alteradoEm:nowISO(),alteradoPor:S.me.id}),`Obra ${o.codigo} reativada.`);o.ativa=true;render();},
   async doImpProg(){const I=S.impProg;if(!I||I.busy)return;const sel=I.semanas.filter(s=>I.sel[s.key]);if(!sel.length)return;
-    if(progObras(I).some(o=>o.st==="nova"||o.st==="inativa")){I.err="Ainda há obras por abrir.";return render();}
     I.busy=true;I.err="";render();const tt=nowISO();
     try{const ids={};
       for(const x of I.nomes){if(x.enc==="__ign")continue;
