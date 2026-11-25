@@ -1245,6 +1245,8 @@ function combLinhaHtml(L,i){if(S.form&&S.form.tipo==="armazem")return pontoHtml(
    ${L.obraDesc==="__outro"?fld(p+".localDescarga","Local de descarga",{req:true,list:"dl_hist"})+fld(p+".coordDescarga","Coordenadas",{ph:"Opcional · ex.: 39.618, -8.837"}):`<div class="fld"><span>Local</span><div>${esc(o?o.codigo+" · "+o.nome:"—")}<br><small class="muted">${esc(o?obraCoordTxt(o)||"sem coordenadas":"")}</small></div></div>`}
    ${fld(p+".cDesc","Descrição da carga",{req:true,ph:"Ex.: 6 lancis, 1 palete de cimento"})}${mats.length?fld(p+".cMat","Material do catálogo",{type:"select",opts:[["","—"]].concat(mats.map(m=>[m.id,m.nome]))}):""}
    ${fld(p+".cPeso","Peso (t)",{type:"number",step:"any",min:0})}${fld(p+".cVol","Nº de volumes",{type:"number",min:0})}</div></div>`;}
+/* várias viaturas (Nº e + outra viatura): pedido novo ou rascunho ainda não submetido */
+const vMulti=F=>!F.id||M.ped[F.id]?.estado==="Rascunho";
 function vTotal(F){return Math.max(1,numOr(F.vQtd)||1)+F.vExtra.reduce((a,L)=>a+Math.max(1,numOr(L.qtd)||1),0);}
 function vLinhaHtml(L,i){const p=`form.vExtra.${i}`;const eq=M.eq[L.equipamentoId];const vars=(eq&&eq.variantes)||[];
   return `<div class="xline"><div class="xh"><b>Viatura ${i+2}</b><button type="button" class="btn sm ghost" data-act="vRem" data-a="${i}" aria-label="Remover linha">× Remover</button></div><div class="xg">
@@ -1269,8 +1271,8 @@ function secTipo(F){const t=F.tipo;let body="";
      ${fld("form.equipamentoId","Viatura",{type:"select",req:true,dis:!F.categoriaId,opts:[["",F.categoriaId?"Selecione":"Escolha primeiro o tipo"]].concat(eqs(F.categoriaId).map(e=>[e.id,e.nome]))})}
      ${vars.length?fld("form.variante","Variante",{type:"select",req:true,opts:[["","Selecione"]].concat(vars.map(v=>[v,v]))}):""}
      ${dtFlds("periodoInicio","Data de início",true)}${dtFlds("periodoFim","Data de fim",true,F.periodoInicio&&F.periodoFim?`Duração: ${fmtDur(Date.parse(fromInput(F.periodoFim))-Date.parse(fromInput(F.periodoInicio)))}`:"")}
-     ${!F.id?fld("form.vQtd","Nº de viaturas iguais",{type:"number",min:1,hint:"Cria um pedido por viatura."}):""}
-     ${!F.id?`<div class="full xlines">${F.vExtra.map((L,i)=>vLinhaHtml(L,i)).join("")}<button type="button" class="btn" data-act="vAdd">+ Adicionar outra viatura</button>${F.vExtra.length?`<small>Ao submeter são criados ${vTotal(F)} pedidos para a mesma obra.</small>`:""}</div>`:""}`;}
+     ${vMulti(F)?fld("form.vQtd","Nº de viaturas iguais",{type:"number",min:1,hint:"Cria um pedido por viatura."}):""}
+     ${vMulti(F)?`<div class="full xlines">${F.vExtra.map((L,i)=>vLinhaHtml(L,i)).join("")}<button type="button" class="btn" data-act="vAdd">+ Adicionar outra viatura</button>${F.vExtra.length?`<small>Ao ${F.id?"guardar":"submeter"} ficam ${vTotal(F)} pedidos para a mesma obra${F.id?" (este + os novos)":""}.</small>`:""}</div>`:""}`;}
   else if(t==="armazem"){
     body=`${fld("form.categoriaId","Tipo de viatura",{type:"select",req:true,opts:[["","Selecione"]].concat(cats().map(c=>[c.id,c.nome])),hint:"A viatura concreta é escolhida pela Logística ao agendar."})}${fld("form.urgente","Urgente (pico)",{type:"check",cls:"full"})}`;}
   else if(t==="fornecedor"){const fs=S.d.fornecedores.filter(f=>f.ativo!==false).sort((a,b)=>a.nome.localeCompare(b.nome,"pt"));
@@ -1336,7 +1338,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
     if(t!=="viatura")need(F.pretendidaEm,"data");
     if(miss.length){F.err="Para submeter falta preencher: "+miss.join(", ")+".";return render();}}
   // linhas extra (validação)
-  if(submeter&&!F.id){const miss=[];
+  if(submeter&&(!F.id||(t==="viatura"&&vMulti(F)))){const miss=[];
     if(t==="viatura")F.vExtra.forEach((L,i)=>{const n=`viatura ${i+2}`;if(!L.categoriaId||!L.equipamentoId)miss.push(`${n}: tipo e viatura`);if((M.eq[L.equipamentoId]?.variantes||[]).length&&!L.variante)miss.push(`${n}: variante`);if(!L.ini_d||!L.fim_d)miss.push(`${n}: datas`);});
     if(t==="maquina"&&F.maqModo==="por")F.maquinas.forEach(n=>{const l=F.maqLoc[n]||{};if(!String(l.o||"").trim()||!String(l.d||"").trim())miss.push(`origem e destino de ${maqLabel(maqBy(n))}`);});
     if(miss.length){F.err="Para submeter falta preencher: "+miss.join(", ")+".";return render();}}
@@ -1361,7 +1363,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
     rota:(()=>{if(t==="viatura")return null;const R=rotaCalc(G,{semPartida:true});return R&&!R.incompleta?{km1:null,km2:R.k2,kmTotal:R.kT,conducao1Min:0,cargaMin:R.tc,conducao2Min:R.d2,descargaMin:R.td,totalMin:R.total,pausas:R.pausas,fonte:R.fonte,calculadoEm:nowISO()}:null;})()};};
   const linhasMat=G=>[{descricao:carga.descricao,materialId:carga.materialId,peso:carga.peso,volumes:carga.volumes,c:carga.c,l:carga.l,a:carga.a}].concat(G.mExtra.map(L=>({descricao:String(L.cDesc||"").trim(),materialId:L.cMat||null,peso:numOr(L.cPeso),volumes:numOr(L.cVol),c:numOr(L.cC),l:numOr(L.cL),a:numOr(L.cA)})));
   const Gs=[];
-  if(!F.id&&t==="viatura"){for(let q=0;q<Math.max(1,numOr(F.vQtd)||1);q++)Gs.push(F);
+  if(vMulti(F)&&t==="viatura"){for(let q=0;q<Math.max(1,numOr(F.vQtd)||1);q++)Gs.push(F);
     F.vExtra.forEach(L=>{const G={...F,categoriaId:L.categoriaId,equipamentoId:L.equipamentoId,variante:L.variante,periodoInicio:L.ini_d?`${L.ini_d}T${L.ini_h||"00:00"}`:"",periodoFim:L.fim_d?`${L.fim_d}T${L.fim_h||"23:59"}`:"",periodoInicio_semHora:!!L.ini_d&&!L.ini_h,periodoFim_semHora:!!L.fim_d&&!L.fim_h,_logMan:false};const a=respAutoId({tipo:t,equipamentoId:L.equipamentoId,categoriaId:L.categoriaId},F.id?M.ped[F.id]?.criadoPor:S.me.id);if(!F._logMan)G.logisticaIds=a?[a]:F.logisticaIds;for(let q=0;q<Math.max(1,numOr(L.qtd)||1);q++)Gs.push(G);});}
   else if(!F.id&&t==="maquina"&&F.maqModo==="por"&&F.maquinas.length>1)F.maquinas.forEach(n=>{const l=F.maqLoc[n]||{};Gs.push({...F,maquinas:[n],obraId:((obraDeTexto(l.d)||obraDeTexto(l.o))||{}).id||F.obraId||"",localCarga:String(l.o||"").trim(),localDescarga:String(l.d||"").trim(),coordCarga:String(l.oc||""),coordDescarga:String(l.dc||""),kmManual:""});});
   else if(!F.id&&t==="maquina"&&F.maqModo==="por"){const n=F.maquinas[0],l=F.maqLoc[n]||{};Gs.push({...F,localCarga:String(l.o||F.localCarga||"").trim(),localDescarga:String(l.d||F.localDescarga||"").trim(),coordCarga:String(l.oc||F.coordCarga||""),coordDescarga:String(l.dc||F.coordDescarga||"")});}
@@ -1375,10 +1377,12 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
       const nz=v=>(v==null||v===""||(Array.isArray(v)&&!v.length))?null:v;const mud=Object.keys(lab).filter(k=>JSON.stringify(nz(data[k]))!==JSON.stringify(nz(p[k]))).map(k=>lab[k]);
       const fz=faseAlt(p.estado);const patch={...data,paraAprovacao:!!p.paraAprovacao,estado:p.estado,historico:hist(p,fz&&mud.length?ALT_LAB[fz]:"Editado",mud.length?"Alterado: "+mud.join(", "):"Sem alterações de conteúdo")};if(mud.length)altPatch(p,fz,patch);
       await savePed(p,patch,`Pedido ${p.numero} atualizado.`);S.form=null;location.hash="pedidos";openPed(p.id);return;}
-    if(F.id){p=M.ped[F.id];const est=submeter?estSub:p.estado;const patch={...data,paraAprovacao:aprov,estado:est,historico:hist(p,submeter?(p.estado==="Devolvido para correção"?(aprov?"Corrigido e ressubmetido para aprovação":"Corrigido e registado em pedidos"):aprov?"Submetido para aprovação":"Submetido (entra logo em pedidos)"):"Editado")};if(submeter)patch.submetidoEm=nowISO();
+    const grupo=datas.length>1?((F.id&&M.ped[F.id]?.grupoId)||rid()):null;
+    if(F.id){p=M.ped[F.id];const est=submeter?estSub:p.estado;const patch={...data,paraAprovacao:aprov,estado:est,...(grupo?{grupoId:grupo}:{}),historico:hist(p,submeter?(p.estado==="Devolvido para correção"?(aprov?"Corrigido e ressubmetido para aprovação":"Corrigido e registado em pedidos"):aprov?"Submetido para aprovação":"Submetido (entra logo em pedidos)"):"Editado")};if(submeter)patch.submetidoEm=nowISO();
       await savePed(p,patch);p={...p,...patch};}
-    else{const criados=[];const grupo=datas.length>1?rid():null;
-      for(const dat of datas){const numero=await proximoNumero();const ref=db.collection("pedidos").doc();const tt=nowISO();
+    const novas=F.id?datas.slice(1):datas;
+    if(novas.length){const criados=F.id?[p]:[];
+      for(const dat of novas){const numero=await proximoNumero();const ref=db.collection("pedidos").doc();const tt=nowISO();
         const q={id:ref.id,numero,criadoEm:tt,criadoPor:S.me.id,estado:submeter?estSub:"Rascunho",paraAprovacao:aprov,...dat,grupoId:grupo,combId:dat.combTot?grupo:null,recurso:{},historico:[{em:tt,por:S.me.id,acao:"Criado",detalhe:TIPO[t].n+(grupo?` (${datas.length} pedidos criados em conjunto${dat.combTot?" · carga combinada":""})`:"")}].concat(submeter?[{em:tt,por:S.me.id,acao:aprov?"Submetido para aprovação":"Submetido (entra logo em pedidos)",detalhe:""}]:[])};
         if(submeter)q.submetidoEm=tt;await W(()=>ref.set(Object.fromEntries(Object.entries(q).filter(([k])=>k!=="id"))));criados.push(q);
         if(submeter&&criados.length>1)notify(aprov?"submetido":"novo",q,`${q.numero} ${aprov?"aguarda aprovação":"novo pedido por agendar"} · ${TIPO_SHORT[t]} (${destTxt(q)})`,["perfil:logistica",...logIds(q).filter(x=>!String(x).startsWith("g:")).map(u=>"u:"+u)]);}
