@@ -1657,7 +1657,27 @@ function motoristasLista(){const L=new Map();(S.d.motoristas||[]).filter(m=>m.at
 /* Férias / BM: motoristas/{id}.ausencias = [{id,tipo:"ferias"|"bm"|"outro",ini,fim (AAAA-MM-DD),obs,em,por}] */
 const AUS_TIPOS=[["ferias","Férias"],["bm","Baixa médica (BM)"],["outro","Outra ausência"]];
 const ausLab=t=>t==="ferias"?"Férias":t==="bm"?"BM":"Ausente";
+/* Trocar de viatura (Pré-planeamento): o motorista X da viatura V passa para a viatura T; se T tiver outro motorista Y, resolve-se logo: Y ausente (regista Férias/BM) ou Y também troca (indica a viatura) */
+const ppVias=()=>viaturasAll().filter(v=>!v.virtual&&v.ativo!==false&&v.unidade!=="reboque").sort((a,b)=>String(a.matricula||a.ident).localeCompare(String(b.matricula||b.ident),"pt"));
+function ppViaLab(v,dia){const mt=vMot(v),a=mt?motAus(mt,dia):null;return `${v.matricula||v.ident} · ${vTag(v)} · ${mt||"sem motorista"}${a?" ("+ausLab(a.tipo)+")":""}`;}
+function ppTrocaHtml(m,v,cur){const f=m.f,dia=S.f.ag.data||todayKey(),B=(act,a,l,cls)=>`<button type="button" class="btn ${cls||""}" data-act="${act}" data-a="${a||""}">${l}</button>`;
+  if(!m.troca&&!m.outro)return `<div class="row" style="justify-content:space-between;align-items:center"><div>Motorista: <b>${esc(cur||"sem motorista")}</b></div><div class="row">${cur?B("ppTroca","",`Trocar de viatura`,"pri"):""}${B("ppOutro","",cur?"Pôr outro motorista nesta viatura":"Escolher motorista","")}</div></div>`;
+  if(m.outro){const nm=String(f.mot||"").trim();const optM=[["","— Sem motorista —"]].concat(motoristasLista().map(x=>{const em=motoristaEm(x.nome,v.id);const a=motAus(x.nome,dia);return [x.nome,`${x.nome}${x.empresa?" · "+x.empresa:""}${em.length?" · está em "+em.map(e=>e.matricula||e.ident).join(", "):""}${a?" · "+ausLab(a.tipo):""}`];}));
+    return `${fld("modal.f.mot","Motorista desta viatura",{type:"select",opts:optM,hint:"Se o motorista escolhido estiver noutra viatura, sai dessa viatura."})}<div class="row">${B("ppCancel","","Cancelar","")}${normNome(nm)!==normNome(cur)?B("ppMotSet","",nm?`Afetar ${esc(nm)} a ${esc(v.matricula||v.ident)}`:`Deixar ${esc(v.matricula||v.ident)} sem motorista`,"pri"):""}</div>`;}
+  const vs=ppVias().filter(x=>x.id!==v.id);const T=f.dest?viaturasAll().find(x=>x.id===f.dest):null;const Y=T?vMot(T):"";const conf=T&&Y&&normNome(Y)!==normNome(cur);
+  let h=`<p style="margin:0 0 6px"><b>${esc(cur)}</b> sai de <b>${esc(v.matricula||v.ident)}</b> e passa para:</p>${fld("modal.f.dest","Nova viatura",{type:"select",req:true,opts:[["","Selecione a viatura"]].concat(vs.map(x=>[x.id,ppViaLab(x,dia)]))})}`;
+  if(T&&!conf)h+=`<div class="note">${esc(T.matricula||T.ident)} está sem motorista. ${esc(v.matricula||v.ident)} fica sem motorista.</div>`;
+  if(conf){const Z=f.yvia?viaturasAll().find(x=>x.id===f.yvia):null,W=Z?vMot(Z):"";
+    h+=`<div class="note warn"><b>Conflito:</b> ${esc(T.matricula||T.ident)} está afeta a <b>${esc(Y)}</b>. O que acontece ao ${esc(Y)}?</div>
+     <div class="seg" role="group" aria-label="Resolver conflito" style="margin:6px 0"><button type="button" class="${f.res==="aus"?"on":""}" data-act="ppRes" data-a="aus" aria-pressed="${f.res==="aus"}">1 · ${esc(Y)} está ausente</button><button type="button" class="${f.res==="troca"?"on":""}" data-act="ppRes" data-a="troca" aria-pressed="${f.res==="troca"}">2 · ${esc(Y)} também troca de viatura</button></div>`;
+    if(f.res==="aus")h+=`<div class="grid g2">${fld("modal.f.ytipo","Tipo de ausência",{type:"select",req:true,opts:AUS_TIPOS})}${fld("modal.f.yobs","Observações",{ph:"Opcional"})}${fld("modal.f.yini","De",{type:"date",req:true})}${fld("modal.f.yfim","Até",{type:"date",req:true})}</div>`;
+    if(f.res==="troca")h+=`${fld("modal.f.yvia",`Viatura do ${Y}`,{type:"select",req:true,opts:[["","Selecione a viatura"]].concat([v,...vs.filter(x=>x.id!==T.id)].map(x=>[x.id,(x.id===v.id?"↔ Trocam entre si · ":"")+ppViaLab(x,dia)]))})}${Z&&W&&normNome(W)!==normNome(Y)&&Z.id!==v.id?`<div class="note warn">${esc(Z.matricula||Z.ident)} está afeta a ${esc(W)}, que fica sem viatura.</div>`:""}`;}
+  return h+`<div class="row" style="margin-top:8px">${B("ppCancel","","Cancelar","")}${B("ppTrocaOk","","Confirmar troca","pri")}</div>`;}
 function motDoc(nome){const n=normNome(nome);return n?(S.d.motoristas||[]).find(m=>normNome(m.nome)===n)||null:null;}
+async function motAusAdd(nm,x,v){const a={id:rid(),tipo:x.tipo,ini:x.ini,fim:x.fim,obs:x.obs||"",viaturaId:v?v.id:null,em:nowISO(),por:S.me.id};const md=motDoc(nm);
+  if(md){const aus=[...(md.ausencias||[]),a];await W(()=>db.doc("motoristas/"+md.id).update({ausencias:aus,alteradoEm:nowISO(),alteradoPor:S.me.id}));md.ausencias=aus;}
+  else{const ref=db.collection("motoristas").doc();const d={nome:nm,empresa:(v&&vEmpresa(v))||"",contacto:"",nFunc:"",ativo:true,ausencias:[a],criadoEm:nowISO(),criadoPor:S.me.id};await W(()=>ref.set(d));if(!(S.d.motoristas||[]).some(y=>y.id===ref.id))(S.d.motoristas=S.d.motoristas||[]).push({id:ref.id,...d});}
+  return a;}
 function motAus(nome,dia){const m=motDoc(nome);return m?(m.ausencias||[]).find(a=>a.ini<=dia&&dia<=(a.fim||a.ini))||null:null;}
 function motoristaEm(nome,excl){const n=normNome(nome);if(!n)return[];return viaturasAll().filter(v=>v.id!==excl&&v.ativo!==false&&v.unidade!=="reboque"&&normNome(v.virtual?v.pm.mot:v.motorista)===n);}
 function distAlertas(emp){const out=[];const T=motTratores().filter(v=>!emp||v.empresa===emp);
@@ -2159,8 +2179,7 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
     const optM=[["","— Sem motorista —"]].concat(motoristasLista().map(x=>{const em=motoristaEm(x.nome,v.id);const a=motAus(x.nome,S.f.ag.data);return [x.nome,`${x.nome}${x.empresa?" · "+x.empresa:""}${em.length?" · está em "+em.map(e=>e.matricula||e.ident).join(", "):""}${a?" · "+ausLab(a.tipo):""}`];}));
     return wrap(`<h2>Motorista · ${esc(v.matricula||v.ident)}${v.virtual?" · "+esc(v.pm.id):""}</h2>`,`<p class="muted" style="margin:0">${esc(vTag(v))}${vReboques(v)?" · "+esc(vReboques(v)):""} · motorista atual: <b>${esc(cur||"sem motorista")}</b></p>
      <section class="form-sec"><header><span class="k">1</span><h3>Afetação à viatura</h3></header><div style="display:block">
-      ${v.virtual?`<p class="muted">O motorista deste conjunto porta-máquinas muda-se no Auxílio ao planeamento de máquinas. Aqui pode marcar as Férias/BM dele.</p>`:`${fld("modal.f.mot","Motorista",{type:"select",opts:optM,hint:"Se o motorista escolhido estiver noutra viatura, sai dessa viatura."})}
-      ${normNome(nm)!==normNome(cur)?`<button class="btn pri" data-act="ppMotSet">${nm?`Afetar ${esc(nm)} a ${esc(v.matricula||v.ident)}`:`Deixar ${esc(v.matricula||v.ident)} sem motorista`}</button>`:""}`}</div></section>
+      ${v.virtual?`<p class="muted">O motorista deste conjunto porta-máquinas muda-se no Auxílio ao planeamento de máquinas. Aqui pode marcar as Férias/BM dele.</p>`:ppTrocaHtml(m,v,cur)}</div></section>
      <section class="form-sec"><header><span class="k">2</span><h3>Férias / BM${nm?" · "+esc(nm):""}</h3></header><div style="display:block">
       ${!nm?`<p class="muted">Escolha primeiro o motorista.</p>`:`${aus.length?`<div class="tw"><table class="aus-t"><thead><tr><th>Tipo</th><th>De</th><th>Até</th><th>Obs.</th><th></th></tr></thead><tbody>${aus.map(a=>`<tr class="${(a.fim||a.ini)<hoje?"muted":""}"><td>${chip(ausLab(a.tipo),a.tipo==="ferias"?"c-info":"c-bad")}</td><td class="num">${fmtD(a.ini)}</td><td class="num">${fmtD(a.fim||a.ini)}</td><td>${esc(a.obs||"")}</td><td class="r"><button class="btn sm ghost" data-act="ppAusDel" data-a="${esc(a.id)}">Remover</button></td></tr>`).join("")}</tbody></table></div>`:`<p class="muted">Sem férias ou BM marcadas.</p>`}
       <div class="grid g2" style="margin-top:8px">${fld("modal.f.tipo","Tipo",{type:"select",req:true,opts:AUS_TIPOS})}${fld("modal.f.obs","Observações",{ph:"Opcional"})}${fld("modal.f.ini","De",{type:"date",req:true})}${fld("modal.f.fim","Até",{type:"date",req:true})}</div>
@@ -2659,12 +2678,27 @@ const A={
       if(m.f.vias)for(const y of P.vias){await W(()=>db.doc("viaturas/"+y.v.id).update({motorista:y.para,alteradoEm:tt,alteradoPor:S.me.id}));v++;}
       S.modal=null;toast(`Manutenção: ${n} motorista(s) novo(s), ${u} atualizado(s)${m.f.vias?`, ${v} viatura(s) com motorista atualizado`:""}.`);render();}catch(e){if(btn)btn.disabled=false;}},
   ppMot(vid){const v=viaturasAll().find(x=>x.id===vid);if(!v||!can.log())return;const d=S.f.ag.data||todayKey();S.modal={t:"ppMot",vid,f:{mot:vMot(v),tipo:"ferias",ini:d,fim:d,obs:""}};render();},
+  ppTroca(){const m=S.modal;if(!m||m.t!=="ppMot")return;const d=S.f.ag.data||todayKey();m.troca=true;m.outro=false;m.err="";Object.assign(m.f,{dest:"",res:"",ytipo:"ferias",yini:d,yfim:d,yobs:"",yvia:""});render();},
+  ppOutro(){const m=S.modal;if(!m||m.t!=="ppMot")return;m.outro=true;m.troca=false;m.err="";render();},
+  ppCancel(){const m=S.modal;if(!m||m.t!=="ppMot")return;const v=viaturasAll().find(x=>x.id===m.vid);m.troca=false;m.outro=false;m.err="";m.f.mot=vMot(v);render();},
+  ppRes(r){const m=S.modal;if(!m||m.t!=="ppMot")return;m.f.res=r;m.err="";if(r==="troca"&&!m.f.yvia)m.f.yvia=m.vid;render();},
+  async ppTrocaOk(){const m=S.modal;if(!m||m.t!=="ppMot")return;const f=m.f;m.err="";const VA=id=>viaturasAll().find(x=>x.id===id);const V=VA(m.vid),T=VA(f.dest),X=vMot(V);
+    if(!X){m.err="Esta viatura não tem motorista para trocar.";return render();}
+    if(!T){m.err="Selecione a nova viatura.";return faltaRender();}
+    const Y=vMot(T),conf=Y&&normNome(Y)!==normNome(X);
+    if(conf&&!f.res){m.err=`Falta escolher o que acontece ao ${Y}: ausente ou também troca de viatura.`;return render();}
+    if(conf&&f.res==="aus"){if(!f.ytipo||!f.yini||!f.yfim){m.err="Preencha o tipo e as datas da ausência.";return faltaRender();}if(f.yfim<f.yini){m.err="A data Até tem de ser igual ou posterior à data De.";return render();}}
+    if(conf&&f.res==="troca"&&!f.yvia){m.err=`Selecione a viatura do ${Y}.`;return faltaRender();}
+    try{if(conf&&f.res==="aus")await motAusAdd(Y,{tipo:f.ytipo,ini:f.yini,fim:f.yfim,obs:[String(f.yobs||"").trim(),`viatura habitual ${T.matricula||T.ident}; substituído por ${X}`].filter(Boolean).join(" · ")},T);
+      await distSetMotorista(T.id,X);S.d.viaturas.forEach(o=>{if(o.id!==T.id&&normNome(o.motorista)===normNome(X))o.motorista="";});const T0=S.d.viaturas.find(o=>o.id===T.id);if(T0)T0.motorista=X;
+      if(conf&&f.res==="troca")await distSetMotorista(f.yvia,Y);
+      toast(`${X} passou para ${T.matricula||T.ident}${conf?(f.res==="aus"?` · ${Y}: ${ausLab(f.ytipo)} registadas`:` · ${Y} passou para ${(VA(f.yvia)||{}).matricula||""}`):""}.`);S.modal=null;render();}
+    catch(e){console.error(e);m.err=errMsg(e);render();}},
   async ppMotSet(){const m=S.modal;if(!m||m.t!=="ppMot")return;await distSetMotorista(m.vid,m.f.mot);render();},
   async ppAusAdd(){const m=S.modal;if(!m||m.t!=="ppMot")return;const f=m.f,nm=String(f.mot||"").trim();m.err="";
     if(!nm){m.err="Selecione o motorista.";return faltaRender();}if(!f.tipo||!f.ini||!f.fim){m.err="Preencha o tipo e as datas De e Até.";return faltaRender();}if(f.fim<f.ini){m.err="A data Até tem de ser igual ou posterior à data De.";return render();}
-    const a={id:rid(),tipo:f.tipo,ini:f.ini,fim:f.fim,obs:String(f.obs||"").trim(),em:nowISO(),por:S.me.id};const md=motDoc(nm);const v=viaturasAll().find(x=>x.id===m.vid);
-    try{if(md){const aus=[...(md.ausencias||[]),a];await W(()=>db.doc("motoristas/"+md.id).update({ausencias:aus,alteradoEm:nowISO(),alteradoPor:S.me.id}));md.ausencias=aus;}
-      else{const ref=db.collection("motoristas").doc();const d={nome:nm,empresa:(v&&vEmpresa(v))||"",contacto:"",nFunc:"",ativo:true,ausencias:[a],criadoEm:nowISO(),criadoPor:S.me.id};await W(()=>ref.set(d));if(!(S.d.motoristas||[]).some(x=>x.id===ref.id))(S.d.motoristas=S.d.motoristas||[]).push({id:ref.id,...d});}
+    const a={tipo:f.tipo,ini:f.ini,fim:f.fim,obs:String(f.obs||"").trim()};const v=viaturasAll().find(x=>x.id===m.vid);
+    try{await motAusAdd(nm,a,v);
       toast(`${ausLab(a.tipo)} de ${nm} marcadas: ${fmtD(a.ini)} a ${fmtD(a.fim)}.`);f.obs="";render();}catch(e){console.error(e);m.err=errMsg(e);render();}},
   async ppAusDel(id){const m=S.modal;if(!m||m.t!=="ppMot")return;const md=motDoc(m.f.mot);if(!md)return;const aus=(md.ausencias||[]).filter(a=>a.id!==id);
     try{await W(()=>db.doc("motoristas/"+md.id).update({ausencias:aus,alteradoEm:nowISO(),alteradoPor:S.me.id}));md.ausencias=aus;toast("Ausência removida.");render();}catch(e){console.error(e);}},
