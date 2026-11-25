@@ -109,6 +109,7 @@ a.btn{text-decoration:none;color:inherit}
 .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
 .fld>span{font-size:12px;font-weight:600;color:var(--muted)}
 .fld em{color:var(--bad);font-style:normal}
+.fld.miss>span{color:var(--bad)}.fld.miss input,.fld.miss select,.fld.miss textarea{border-color:var(--bad)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 22%,transparent)!important}
 .fld input,.fld select,.fld textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--panel);min-width:0}
 .fld textarea{resize:vertical}
 .fld small{font-size:11px}
@@ -1317,7 +1318,7 @@ function maqPicker(F){if(!CAT().length)return `<div class="note warn full">A lis
      <datalist id="dl_maqloc">${[...new Set(PS.locais.map(l=>l.nome).concat(S.d.obras.filter(o=>o.ativa!==false).map(o=>`${o.codigo} · ${o.nome}`)))].map(x=>`<option value="${esc(x)}">`).join("")}</datalist><small>São criados ${sel.size} pedidos, um por máquina, todos para a obra escolhida acima.</small>`:""}</div>`:""}
   <small>* Peso e dimensões estimados pela classe da máquina. Corrigem-se no Auxílio ao planeamento de máquinas › Lista de Equipamentos.</small></div>`;}
 async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tipo;F.paraAprovacao=false;const aprov=false,estSub=aprov?"Pendente de aprovação":"Por agendar";
-  if(!t){F.err="Escolha o tipo de pedido.";return render();}if(NOVO_LAY.includes(t)){if(F.obraDesc&&F.obraDesc!=="__outro")F.obraId=F.obraDesc;else if(F.obraCarga&&F.obraCarga!=="__outro")F.obraId=F.obraCarga;}if(t==="maquina"){const ob=obraDeTexto(F.localDescarga)||obraDeTexto(F.localCarga)||(F.maqModo==="por"&&!F.id?F.maquinas.map(n=>F.maqLoc[n]||{}).map(l=>obraDeTexto(l.d)||obraDeTexto(l.o)).find(Boolean):null);if(ob)F.obraId=ob.id;else if(!F.id)F.obraId="";}
+  if(!t){F.err="Escolha o tipo de pedido.";return faltaRender();}if(NOVO_LAY.includes(t)){if(F.obraDesc&&F.obraDesc!=="__outro")F.obraId=F.obraDesc;else if(F.obraCarga&&F.obraCarga!=="__outro")F.obraId=F.obraCarga;}if(t==="maquina"){const ob=obraDeTexto(F.localDescarga)||obraDeTexto(F.localCarga)||(F.maqModo==="por"&&!F.id?F.maquinas.map(n=>F.maqLoc[n]||{}).map(l=>obraDeTexto(l.d)||obraDeTexto(l.o)).find(Boolean):null);if(ob)F.obraId=ob.id;else if(!F.id)F.obraId="";}
   if(!F.obraId&&t!=="cisterna"&&t!=="maquina"){F.err=NOVO_LAY.includes(t)?"Selecione a obra de carga ou a obra de descarga.":"Selecione a obra.";return render();}
   const carga={descricao:String((t==="cisterna"&&F.cMat==="__outro"?(F.cMatOutro||F.cDesc):F.cDesc)||"").trim(),materialId:F.cMat&&F.cMat!=="__outro"?F.cMat:null,c:numOr(F.cC),l:numOr(F.cL),a:numOr(F.cA),peso:numOr(F.cPeso),volumes:numOr(F.cVol)};
   const forn=F.fornecedorId&&F.fornecedorId!=="__outro"?M.forn[F.fornecedorId]:null;const fornNome=forn?forn.nome:String(F.fornecedorNome||"").trim();
@@ -1336,17 +1337,17 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
     if(t!=="viatura"&&t!=="cisterna"&&!porMaq)need(String(F.localCarga||"").trim(),t==="maquina"?"origem":t==="recolha"?"local de recolha":"local de carga");
     if(!porMaq)need(String(F.localDescarga||"").trim(),t==="viatura"?"local de trabalho":"destino");
     if(t!=="viatura")need(F.pretendidaEm,"data");
-    if(miss.length){F.err="Para submeter falta preencher: "+miss.join(", ")+".";return render();}}
+    if(miss.length){F.err="Para submeter falta preencher: "+miss.join(", ")+".";return faltaRender();}}
   // linhas extra (validação)
   if(submeter&&(!F.id||(t==="viatura"&&vMulti(F)))){const miss=[];
     if(t==="viatura")F.vExtra.forEach((L,i)=>{const n=`viatura ${i+2}`;if(!L.categoriaId||!L.equipamentoId)miss.push(`${n}: tipo e viatura`);if((M.eq[L.equipamentoId]?.variantes||[]).length&&!L.variante)miss.push(`${n}: variante`);if(!L.ini_d||!L.fim_d)miss.push(`${n}: datas`);});
     if(t==="maquina"&&F.maqModo==="por")F.maquinas.forEach(n=>{const l=F.maqLoc[n]||{};if(!String(l.o||"").trim()||!String(l.d||"").trim())miss.push(`origem e destino de ${maqLabel(maqBy(n))}`);});
-    if(miss.length){F.err="Para submeter falta preencher: "+miss.join(", ")+".";return render();}}
-  if(t==="armazem"||t==="fornecedor"){const bad=F.mExtra.findIndex(L=>!String(L.cDesc||"").trim());if(submeter&&bad>=0){F.err=`Para submeter falta preencher: descrição do material ${bad+2}.`;return render();}}
+    if(miss.length){F.err="Para submeter falta preencher: "+miss.join(", ")+".";return faltaRender();}}
+  if(t==="armazem"||t==="fornecedor"){const bad=F.mExtra.findIndex(L=>!String(L.cDesc||"").trim());if(submeter&&bad>=0){F.err=`Para submeter falta preencher: descrição do material ${bad+2}.`;return faltaRender();}}
   if(!F.id&&COMB_T.includes(t)&&(F.cExtra||[]).length){const ms=[];const vistos=new Set([F.obraDesc&&F.obraDesc!=="__outro"?F.obraDesc:""]);
     if(t==="armazem")F.cExtra.forEach((L,i)=>{const n=`ponto ${i+2}`;const loc=(k,kl,lab)=>{if(!L[k]||(L[k]==="__outro"&&!String(L[kl]||"").trim()))ms.push(`${n}: ${lab}`);};loc("obraCarga","localCarga","local de carga");if(!String(L.box||"").trim())ms.push(`${n}: box de carga`);if(!String(L.cDesc||"").trim())ms.push(`${n}: descrição da carga`);loc("obraDesc","localDescarga","local de descarga");});
     else F.cExtra.forEach((L,i)=>{const n=`obra de destino ${i+2}`;if(!L.obraDesc)ms.push(`${n}: obra`);else if(L.obraDesc==="__outro"){if(!String(L.localDescarga||"").trim())ms.push(`${n}: local de descarga`);}else if(vistos.has(L.obraDesc))ms.push(`${n}: obra repetida`);else vistos.add(L.obraDesc);if(!String(L.cDesc||"").trim())ms.push(`${n}: descrição da carga`);});
-    if(ms.length){F.err="Carga combinada, falta corrigir: "+ms.join(", ")+".";return render();}}
+    if(ms.length){F.err="Carga combinada, falta corrigir: "+ms.join(", ")+".";return faltaRender();}}
   const mk=G=>{  const pi=fromInput(G.periodoInicio),pf=fromInput(G.periodoFim);const eqId=t==="maquina"?(M.eq["porta-maquinas"]?"porta-maquinas":null):(G.equipamentoId||null);
   let maquinas=null,analise=null;
   if(t==="maquina"){maquinas=G.maquinas.filter(n=>maqBy(n)).map(n=>{const e=maqBy(n),s=specOf(e);return{num:n,label:maqLabel(e),classe:e.classe,peso:s.peso,c:s.c,l:s.l,a:s.a,est:!!s.est};});
@@ -2391,7 +2392,7 @@ const A={
       if(!r||!r[0]){toast("Morada não encontrada. Marque o local no mapa.","bad");return;}const c=`${(+r[0].lat).toFixed(6)}, ${(+r[0].lon).toFixed(6)}`;_geo[normLoc(q)]={lat:+r[0].lat,lon:+r[0].lon,nome:q};if(which==="carga")F.coordCarga=c;else F.coordDescarga=c;_rm.key="";toast("Local encontrado: "+(r[0].display_name||"").split(",").slice(0,3).join(","));render();}catch(e){toast("Não foi possível contactar o serviço de moradas.","bad");}},
   editValid(id){const P=M.ped[id];S.modal={t:"editValid",id,f:{inicio:toInput(P.inicioEfetivo||P.previstoInicio),fim:toInput(P.conclusaoEfetiva||nowISO()),custoEfetivo:P.recurso?.custoEfetivo??"",motivo:""}};render();},
   async doEditValid(){const m=S.modal,P=M.ped[m.id],f=m.f;const fe=P.estado==="Concluído";const ini=fromInput(f.inicio),fim=fe?fromInput(f.fim):null;
-    if(!ini||(fe&&!fim)){m.err="Indique as datas e horas reais.";return render();}if(fe&&fim<ini){m.err="A conclusão não pode ser anterior ao início.";return render();}
+    if(!ini||(fe&&!fim)){m.err="Indique as datas e horas reais.";return faltaRender();}if(fe&&fim<ini){m.err="A conclusão não pode ser anterior ao início.";return render();}
     const mud=[];if(ini!==P.inicioEfetivo)mud.push(`início ${fmtDT(P.inicioEfetivo)} → ${fmtDT(ini)}`);if(fe&&fim!==P.conclusaoEfetiva)mud.push(`conclusão ${fmtDT(P.conclusaoEfetiva)} → ${fmtDT(fim)}`);
     const ce=fe?numOr(f.custoEfetivo):P.recurso?.custoEfetivo??null;if(fe&&ce!==(P.recurso?.custoEfetivo??null))mud.push(`custo efetivo ${eur(P.recurso?.custoEfetivo)} → ${eur(ce)}`);
     if(!mud.length&&!String(f.motivo||"").trim()){S.modal=null;return render();}
@@ -2415,7 +2416,7 @@ const A={
   ped(id){S.notifOpen=false;openPed(id);}, obraDet(id){S.modal={t:"obraDet",oid:id};render();},
   close(){S.modal=S.modal&&S.modal.ret==="prog"&&S.impProg?{t:"impProg"}:null;render();},
   enc(id){const e=id?M.enc[id]:null;S.modal={t:"enc",id:id||null,f:e?{...e,ativo:e.ativo!==false,aliasesTxt:(e.aliases||[]).join("\n")}:{nome:"",telemovel:"",extensao:"",tag:"",aliasesTxt:"",obs:"",ativo:true}};render();},
-  async saveEnc(){const m=S.modal,f=m.f;const nm=String(f.nome||"").trim();if(!nm){m.err="Preencha o nome.";return render();}
+  async saveEnc(){const m=S.modal,f=m.f;const nm=String(f.nome||"").trim();if(!nm){m.err="Preencha o nome.";return faltaRender();}
     const tel=String(f.telemovel||"").replace(/[\s.-]/g,"").replace(/^\+?351/,"");if(tel&&!/^9\d{8}$/.test(tel)){m.err="O telemóvel deve ter 9 dígitos e começar por 9.";return render();}
     const data={nome:nm,telemovel:tel,extensao:String(f.extensao||"").trim(),tag:String(f.tag||"").trim(),aliases:[...new Set(String(f.aliasesTxt||"").split("\n").map(x=>x.trim()).filter(Boolean))],obs:f.obs||"",ativo:!!f.ativo,alteradoEm:nowISO(),alteradoPor:S.me.id};
     if(m.id)await W(()=>db.doc("encarregados/"+m.id).update(data),"Encarregado atualizado.");
@@ -2541,7 +2542,7 @@ const A={
   async submeter(a){const[id,mo]=String(a).split("|");A.editar(id);S.form.paraAprovacao=mo==="aprov";await guardarPed(true);},
   decidir(a){const[id,tipo]=a.split("|");S.modal={t:"decisao",id,tipo,f:{prioridade:M.ped[id].prioridade||"normal",nota:"",motivo:""}};render();},
   async doDecisao(next){const m=S.modal,P=M.ped[m.id],f=m.f;if(P.estado!=="Pendente de aprovação"){m.err="Este pedido já foi tratado por outra pessoa.";return render();}
-    if(m.tipo!=="aprovar"&&!f.motivo.trim()){m.err="Indique o motivo.";return render();}
+    if(m.tipo!=="aprovar"&&!f.motivo.trim()){m.err="Indique o motivo.";return faltaRender();}
     let patch;const t=nowISO();
     if(m.tipo==="aprovar"){patch={estado:"Por agendar",aprovadoEm:t,logisticaId:P.logisticaId||gestorAutoId(P)||S.me.id,prioridade:f.prioridade,historico:hist(P,"Aprovado",(f.prioridade!==P.prioridade?`Prioridade: ${P.prioridade} → ${f.prioridade}. `:"")+(f.nota||""))};}
     else if(m.tipo==="rejeitar")patch={estado:"Rejeitado",rejeitadoEm:t,logisticaId:P.logisticaId||gestorAutoId(P)||S.me.id,motivos:{rejeicao:f.motivo.trim()},historico:hist(P,"Rejeitado",f.motivo.trim())};
@@ -2550,7 +2551,7 @@ const A={
     notify(m.tipo,{...P,...patch},{aprovar:`${P.numero} foi aprovado`,rejeitar:`${P.numero} foi rejeitado: ${f.motivo}`,devolver:`${P.numero} foi devolvido para correção: ${f.motivo}`}[m.tipo],[`u:${P.criadoPor}`]);
     if(next==="agendar")A.agendar(P.id);else{S.modal=null;render();}},
   agendar(id){const P=M.ped[id];if(P&&P.destinoPendente){toast(`${P.numero}: defina o destino antes de agendar. Edite o pedido e escolha o local de descarga.`,"bad");return;}const r=P.recurso||{};const _pt=(r.partida&&r.partida.v)||(r.viaturaId?partidaDefault(r.viaturaId):"s:"+(CFG().sedePadrao||"Tojal"));const _i0=P.previstoInicio||P.periodoInicio||P.maqDisp||P.pretendidaEm;S.modal={t:"agendar",id,f:{inicio:toInput(_i0),regressar:!!r.regresso,regSede:r.regresso?.sede||"",chegada:toInput(P.chegadaPrevista||(P.tipo==="viatura"?null:P.fimTrabalho||P.previstoFim)||null),fim:toInput(P.fimTrabalho||(P.tipo==="viatura"?P.periodoFim:null)||P.previstoFim||P.periodoFim||(P.rota&&P.rota.totalMin&&_i0&&P.tipo!=="maquina"?new Date(Date.parse(_i0)+P.rota.totalMin*60000).toISOString():null)||(P.tipo==="maquina"&&P.analise&&P.analise.duracaoMin&&(P.maqDisp||P.pretendidaEm)?new Date(Date.parse(P.maqDisp||P.pretendidaEm)+P.analise.duracaoMin*60000).toISOString():null)),equipamentoId:P.equipamentoId||"",prioridade:P.prioridade||"normal",origem:r.origem||"",viaturaId:r.viaturaId||"",transportadoraId:r.transportadoraId||"",matricula:r.matricula||"",motorista:r.motorista||"",custoPrevisto:r.custoPrevisto??"",motivoExterno:r.motivoExterno||"",partida:_pt,partidaCoord:(r.partida&&r.partida.coord)||"",_partMan:!!(r.partida&&r.partida.v),guardarPartida:false}};if(/T00:00$/.test(S.modal.f.inicio||"")&&!P.previstoInicio){S.modal.f.inicio=S.modal.f.inicio.replace(/T00:00$/,"T07:00");if(P.tipo!=="viatura")S.modal.f.fim="";S.modal.f.chegada="";}render();},
-  async doAgendar(){const m=S.modal,P=M.ped[m.id],f=m.f;if(!f.inicio){m.err="Indique a data e hora previstas de início.";return render();}if(!f.origem){m.err="Indique se é frota própria ou veículo externo.";return render();}
+  async doAgendar(){const m=S.modal,P=M.ped[m.id],f=m.f;if(!f.inicio){m.err="Indique a data e hora previstas de início.";return faltaRender();}if(!f.origem){m.err="Indique se é frota própria ou veículo externo.";return faltaRender();}
     const ini=fromInput(f.inicio),fimServ=fromInput(f.fim),fim=m._fimTot||fimServ;if(fim&&fim<=ini){m.err="O fim previsto tem de ser posterior ao início.";return render();}if(P.tipo==="viatura"&&f.chegada&&fimServ&&fimServ<fromInput(f.chegada)){m.err="O fim do trabalho em obra tem de ser posterior à chegada prevista.";return render();}
     const via=f.origem==="propria"?M.via[f.viaturaId]:null;
     const recurso={origem:f.origem,viaturaId:f.origem==="propria"?f.viaturaId||null:null,matricula:f.origem==="propria"?(via?.matricula||""):f.matricula.trim(),motorista:f.motorista.trim(),transportadoraId:f.origem==="externa"?f.transportadoraId||null:null,
@@ -2606,19 +2607,19 @@ const A={
   iniciar(id){S.modal={t:"iniciar",id,f:{inicio:toInput(nowISO())}};render();},
   async doIniciar(){const m=S.modal,P=M.ped[m.id];if(!m.f.inicio)return;const t=fromInput(m.f.inicio);await savePed(P,{estado:"Em execução",inicioEfetivo:t,historico:hist(P,"Em execução",`Início efetivo ${fmtDT(t)}`)},`${P.numero} em execução.`);S.modal=null;render();},
   concluir(id){S.modal={t:"concluir",id,f:{inicio:toInput(M.ped[id].inicioEfetivo||M.ped[id].previstoInicio),fim:toInput(nowISO()),custoEfetivo:M.ped[id].recurso?.custoEfetivo??"",ocorrencia:"",comprovativos:[]}};render();},
-  async doConcluir(){const m=S.modal,P=M.ped[m.id],f=m.f;const ini=P.inicioEfetivo||fromInput(f.inicio),fim=fromInput(f.fim);if(!ini||!fim){m.err="Indique as datas efetivas de início e conclusão.";return render();}if(fim<ini){m.err="A conclusão não pode ser anterior ao início.";return render();}
+  async doConcluir(){const m=S.modal,P=M.ped[m.id],f=m.f;const ini=P.inicioEfetivo||fromInput(f.inicio),fim=fromInput(f.fim);if(!ini||!fim){m.err="Indique as datas efetivas de início e conclusão.";return faltaRender();}if(fim<ini){m.err="A conclusão não pode ser anterior ao início.";return render();}
     const oc=[...(P.ocorrencias||[])];if(f.ocorrencia.trim())oc.push({em:nowISO(),por:S.me.id,texto:f.ocorrencia.trim()});
     const patch={estado:"Concluído",inicioEfetivo:ini,conclusaoEfetiva:fim,confirmadoPor:S.me.id,recurso:{...(P.recurso||{}),custoEfetivo:numOr(f.custoEfetivo)},ocorrencias:oc,comprovativos:[...(P.comprovativos||[]),...f.comprovativos],historico:hist(P,"Concluído",`Conclusão efetiva ${fmtDT(fim)}`)};
     await savePed(P,patch,`${P.numero} concluído.`);notify("concluido",{...P,...patch},`${P.numero} foi concluído`,[`u:${P.criadoPor}`]);S.modal=null;render();},
   cancelar(id){S.modal={t:"cancelar",id,f:{motivo:""}};render();},
-  async doCancelar(){const m=S.modal,P=M.ped[m.id];if(!m.f.motivo.trim()){m.err="Indique o motivo do cancelamento.";return render();}
+  async doCancelar(){const m=S.modal,P=M.ped[m.id];if(!m.f.motivo.trim()){m.err="Indique o motivo do cancelamento.";return faltaRender();}
     const patch={estado:"Cancelado",canceladoEm:nowISO(),motivos:{cancelamento:m.f.motivo.trim()},historico:hist(P,"Cancelado",m.f.motivo.trim())};await savePed(P,patch,`${P.numero} cancelado.`);
     notify("cancelado",{...P,...patch},`${P.numero} foi cancelado: ${m.f.motivo}`,P.criadoPor===S.me.id?["perfil:logistica"]:[`u:${P.criadoPor}`]);S.modal=null;render();},
   distSet(a){const [k,v]=String(a).split("|");S.dist=S.dist||{emp:"PTSA",v:"conj",q:""};S.dist[k]=v;if(k!=="q")S.dist.q="";render();},
   distAddReb(tid){S.dist._extra=tid;const sel=document.querySelector(`[data-dist^="reb|${CSS.escape(tid)}|"]:last-of-type`);const t=M.via[tid];if(!t)return;
     const pool=poolReboques();const tk=plateKey(t.matricula);const L=[...pool.values()].filter(x=>!x.trator&&linkOk(tk,x.k)!==false);
     S.modal={t:"distReb",tid,f:{rk:""},opts:L.map(x=>[x.k,`${x.b.matricula} · ${rebTxt(x)}`])};render();},
-  async doDistReb(){const m=S.modal;if(!m.f.rk){m.err="Escolha o reboque.";return render();}const t=M.via[m.tid];S.modal=null;render();await distSetReboque(m.tid,(t.reboques||[]).length,m.f.rk);},
+  async doDistReb(){const m=S.modal;if(!m.f.rk){m.err="Escolha o reboque.";return faltaRender();}const t=M.via[m.tid];S.modal=null;render();await distSetReboque(m.tid,(t.reboques||[]).length,m.f.rk);},
   async ligTog(a){const i=a.indexOf("|"),emp=a.slice(0,i),k=a.slice(i+1);const L=ligTab(emp);if(!L)return;const X=new Set(L.X||[]);X.has(k)?X.delete(k):X.add(k);await ligGuardar(emp,{...L,X:[...X]});},
   async ligCriar(emp){await ligGuardar(emp,ligDaFrota(emp,null));toast(`Tabela ${emp} criada com as composições atuais como permitidas. Marque as outras ligações possíveis.`);},
   async ligSync(emp){const L=ligTab(emp);if(!L)return;const n=ligDaFrota(emp,L);const d=n.T.length-L.T.length+n.R.length-L.R.length;await ligGuardar(emp,n);toast(d?`${d} viatura(s) acrescentada(s) à tabela, sem ligações marcadas.`:"A tabela já tinha todas as viaturas.");},
@@ -2631,7 +2632,7 @@ const A={
       if(m.f.vias)for(const y of P.vias){await W(()=>db.doc("viaturas/"+y.v.id).update({motorista:y.para,alteradoEm:tt,alteradoPor:S.me.id}));v++;}
       S.modal=null;toast(`Manutenção: ${n} motorista(s) novo(s), ${u} atualizado(s)${m.f.vias?`, ${v} viatura(s) com motorista atualizado`:""}.`);render();}catch(e){if(btn)btn.disabled=false;}},
   motEdit(id){const m=id?(S.d.motoristas||[]).find(x=>x.id===id):null;S.modal={t:"motEdit",mid:id||null,f:{nome:m?.nome||"",empresa:m?.empresa||S.dist?.emp||"PTSA",nFunc:m?.nFunc||"",contacto:m?.contacto||"",ativo:m?m.ativo!==false:true}};render();},
-  async doMotEdit(){const m=S.modal,f=m.f;const nome=titleName(f.nome);if(!nome){m.err="Indique o nome.";return render();}
+  async doMotEdit(){const m=S.modal,f=m.f;const nome=titleName(f.nome);if(!nome){m.err="Indique o nome.";return faltaRender();}
     if((S.d.motoristas||[]).some(x=>x.id!==m.mid&&normNome(x.nome)===normNome(nome))){m.err="Já existe um motorista com este nome.";return render();}
     const d={nome,empresa:f.empresa,nFunc:String(f.nFunc||"").trim(),contacto:String(f.contacto||"").trim(),ativo:!!f.ativo};
     if(m.mid){const old=(S.d.motoristas||[]).find(x=>x.id===m.mid);await W(()=>db.doc("motoristas/"+m.mid).update(d));
@@ -2655,7 +2656,7 @@ const A={
   agNav(d){const f=S.f.ag;if(d==="0"){f.data=todayKey();return render();}const n=+d;if(f.vista==="dia"||f.vista==="lista"||f.vista==="plano")f.data=addDays(f.data,n*(f.vista==="lista"?7:1));else if(f.vista==="semana")f.data=addDays(f.data,7*n);else{const[y,m]=f.data.split("-").map(Number);const t=new Date(Date.UTC(y,m-1+n,1));f.data=t.toISOString().slice(0,10);}render();},
   obra(id){const o=id?M.obra[id]:null;S.modal={t:"obra",id:id||null,f:o?{...o,ativa:o.ativa!==false,motivoZona:""}:{codigo:"",nome:"",cliente:"",morada:"",localizacao:"",zonaId:"",gestorId:role()==="obra"?S.me.id:"",contacto:"",inicio:"",fim:"",ativa:true,obs:""}};render();},
   novaObra(){A.obra("");},
-  async saveObra(){const m=S.modal,f=m.f;const cod=String(f.codigo||"").trim();if(!cod||!String(f.nome||"").trim()){m.err="Preencha o código e o nome da obra.";return render();}
+  async saveObra(){const m=S.modal,f=m.f;const cod=String(f.codigo||"").trim();if(!cod||!String(f.nome||"").trim()){m.err="Preencha o código e o nome da obra.";return faltaRender();}
     if(S.d.obras.some(o=>o.id!==m.id&&String(o.codigo).trim().toLowerCase()===cod.toLowerCase())){m.err=`Já existe uma obra com o código ${cod}.`;return render();}
     const o=m.id?M.obra[m.id]:null;
     const pcO=parseCoords(f.localizacao);const data={codigo:cod,nome:f.nome.trim(),cliente:f.cliente||"",morada:f.morada||"",localizacao:f.localizacao||"",lat:pcO?pcO.lat:null,lon:pcO?pcO.lon:null,dto:String(f.dto||"").trim(),gestorId:f.gestorId||(role()==="obra"?S.me.id:null),contacto:f.contacto||"",inicio:f.inicio||"",fim:f.fim||"",ativa:!!f.ativa,obs:f.obs||""};
@@ -2701,8 +2702,8 @@ const A={
       toast(`${n} pedido(s) de cisternas criados.`);S.impC=null;S.modal=null;render();}catch(e){console.error(e);toast(errMsg(e)+` (${n} criados antes do erro)`,"bad");if(btn)btn.disabled=false;}},
   frotaSemEq(){S.f.frota.eq="_sem";render();},
   expPlano(fmt){const d=S.f.ag.data||todayKey();S.modal={t:"expPlano",fmt,f:{de:d,a:d,todos:true,_todos:true,...Object.fromEntries(EXP_EST.map(e=>[e[0],true]))}};render();},
-  async doExpPlano(){const m=S.modal,f=m.f;const sel=EXP_EST.filter(e=>f[e[0]]);if(!sel.length){m.err="Selecione pelo menos um estado.";return render();}if(!f.de||!f.a){m.err="Indique as datas de início e de fim.";return render();}if(f.a<f.de){m.err="A data final tem de ser igual ou posterior à inicial.";return render();}
-    const n=Math.round((Date.parse(f.a)-Date.parse(f.de))/864e5)+1;if(n>62){m.err="Escolha um período até 62 dias.";return render();}
+  async doExpPlano(){const m=S.modal,f=m.f;const sel=EXP_EST.filter(e=>f[e[0]]);if(!sel.length){m.err="Selecione pelo menos um estado.";return faltaRender();}if(!f.de||!f.a){m.err="Indique as datas de início e de fim.";return faltaRender();}if(f.a<f.de){m.err="A data final tem de ser igual ou posterior à inicial.";return render();}
+    const n=Math.round((Date.parse(f.a)-Date.parse(f.de))/864e5)+1;if(n>62){m.err="Escolha um período até 62 dias.";return faltaRender();}
     const fmt=m.fmt;S.modal=null;render();await exportPlano(fmt,{de:f.de,a:f.a,est:sel.flatMap(e=>e[2]),estLab:sel.length===EXP_EST.length?"todos":sel.map(e=>e[1]).join(", ")});},
   async doImport(){const I=S.imp;if(!I||!I.res)return;const p=I.plano;const t=nowISO();let n=0;
     try{for(const x of p.novos){await db.doc("viaturas/"+x.id).set({...x.doc,criadoEm:t,criadoPor:S.me.id,origemImport:{ficheiro:I.nome,folha:I.folha,em:t}});n++;}
@@ -2715,7 +2716,7 @@ const A={
   categoria(id){const x=id?M.cat[id]:null;S.modal={t:"categoria",id:id||null,f:x?{...x,ativo:x.ativo!==false}:{nome:"",ordem:"",ativo:true}};render();},
   gestor(id){const x=id?M.gest[id]:null;const tm=a=>Object.fromEntries((a||[]).map(k=>[k,true]));S.modal={t:"gestor",id:id||null,f:x?{...x,ativo:x.ativo!==false,emp:tm(gEmp(x)),eq:tm(gEq(x)),zo:tm(gZo(x))}:{nome:"",funcao:"",contacto:"",email:"",utilizadorId:"",ativo:true,emp:{},eq:{},zo:{}}};render();},
   zona(id){const x=id?M.zona[id]:null;S.modal={t:"zona",id:id||null,f:x?{...x,ativo:x.ativo!==false}:{nome:"",ordem:"",ativo:true}};render();},
-  async saveSimple(col){const m=S.modal,f=m.f;const req=col==="viaturas"?(f.matricula||f.ident):f.nome;if(col==="viaturas"&&!m.id&&M.via["v-"+plateKey(req)]){m.err="Já existe uma viatura com esta matrícula.";return render();}if(!String(req||"").trim()){m.err="Preencha o nome.";return render();}
+  async saveSimple(col){const m=S.modal,f=m.f;const req=col==="viaturas"?(f.matricula||f.ident):f.nome;if(col==="viaturas"&&!m.id&&M.via["v-"+plateKey(req)]){m.err="Já existe uma viatura com esta matrícula.";return render();}if(!String(req||"").trim()){m.err="Preencha o nome.";return faltaRender();}
     let data;
     if(col==="viaturas"){const old=(m.id&&M.via[m.id]?.reboques)||[];const reb=String(f.reboquesTxt||"").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const pr=l.split(/\s*[·|;]\s*|\s+-\s+/);const o=old.find(b=>plateKey(b.matricula)===plateKey(pr[0]));return{...(o||{}),matricula:normPlate(pr[0]),tipo:pr.slice(1).join(" ").trim()||(o?o.tipo||"":"")};});
       const mat=normPlate(f.matricula||f.ident);const eqL=[...new Set([f.equipamentoId,...reb.map(b=>eqDeTipo(b.tipo))].filter(e=>e&&M.eq[e]))];
@@ -2725,7 +2726,7 @@ const A={
     else if(col==="clientes"){if(!m.id&&(S.d.clientes||[]).some(c=>normNome(c.nome)===normNome(f.nome))){m.err="Já existe um cliente com este nome.";return render();}data={nome:f.nome.trim(),contacto:f.contacto||"",obs:f.obs||"",ativo:!!f.ativo,materiais:Object.keys(f.mat||{}).filter(k=>f.mat[k])};}
     else if(col==="fornecedores")data={nome:f.nome.trim(),contacto:f.contacto||"",morada:f.morada||"",obs:f.obs||"",ativo:!!f.ativo};
     else if(col==="materiais")data={nome:f.nome.trim(),tipo:f.tipo||"material",unidade:f.unidade||"",caracteristicas:f.caracteristicas||"",ativo:!!f.ativo,equipamentos:Object.keys(f.eqs||{}).filter(k=>f.eqs[k])};
-    else if(col==="equipamentos"){if(!f.categoriaId){m.err="Escolha a categoria.";return render();}data={nome:f.nome.trim(),categoriaId:f.categoriaId,ordem:numOr(f.ordem)??99,recolha:!!f.recolha,variantes:String(f.variantesTxt||"").split("\n").map(x=>x.trim()).filter(Boolean),ativo:!!f.ativo};}
+    else if(col==="equipamentos"){if(!f.categoriaId){m.err="Escolha a categoria.";return faltaRender();}data={nome:f.nome.trim(),categoriaId:f.categoriaId,ordem:numOr(f.ordem)??99,recolha:!!f.recolha,variantes:String(f.variantesTxt||"").split("\n").map(x=>x.trim()).filter(Boolean),ativo:!!f.ativo};}
     else data={nome:f.nome.trim(),ordem:numOr(f.ordem)??99,ativo:!!f.ativo};
     data.alteradoEm=nowISO();data.alteradoPor=S.me.id;
     if(m.id)await W(()=>db.doc(col+"/"+m.id).update(data),"Guardado.");else await W(()=>db.collection(col).doc(col==="viaturas"?"v-"+plateKey(data.matricula):undefined).set({...data,criadoEm:nowISO(),criadoPor:S.me.id}),"Criado.");
@@ -3012,12 +3013,22 @@ document.addEventListener("keydown",e=>{const t=e.target;if(!(t.classList&&t.cla
   else if(e.key==="Tab"){if(_cbx&&_cbx.inp===t&&t._typing&&_cbx.items.length&&_cbx.idx>=0)cbxPick(_cbx.idx);}},true);
 document.addEventListener("focusout",e=>{const t=e.target;if(!(t.classList&&t.classList.contains("cbx-in")))return;setTimeout(()=>{if(document.activeElement===t)return;if(_cbx&&_cbx.inp===t)cbxClose();t._typing=false;if(t._sel)t.value=cbxText(t._sel);},120);});
 window.addEventListener("resize",()=>cbxClose());document.addEventListener("scroll",e=>{if(_cbx&&!(e.target.closest&&e.target.closest("#cbxPop")))cbxClose();},true);
+/* Dados em falta ao gravar: marca a vermelho os campos obrigatórios (*) vazios e salta para o 1.º */
+function faltaRender(){S.missOn=true;S.missJump=true;render();}
+function marcarFalta(){const root=S.modal?document.getElementById("modal"):document.getElementById("app");if(!root)return;
+  const err=[...root.querySelectorAll(".note.bad")].find(n=>/falta|preencha|selecione|indique|escolha|corrigir/i.test(n.textContent));
+  if(!err){S.missOn=false;S.missJump=false;return;}
+  const miss=[];root.querySelectorAll("label.fld").forEach(lb=>{if(!lb.querySelector(":scope>span>em"))return;const c=lb.querySelector("select,textarea,input:not(.cbx-in)");if(!c||c.disabled||c.type==="checkbox")return;
+    if(String(c.value||"").trim()===""){lb.classList.add("miss");miss.push(lb);}});
+  if(!S.missJump)return;S.missJump=false;
+  const alvo=miss[0]||err;alvo.scrollIntoView({behavior:"smooth",block:"center"});
+  if(miss[0]){const c=miss[0].querySelector(".cbx-in")||miss[0].querySelector("select,textarea,input");try{c.focus({preventScroll:true});}catch(e){}}}
 function doRender(){buildMaps();const ae=document.activeElement;if(ae&&ae.classList&&ae.classList.contains("cbx-in")&&ae.id){_cbxKeep={id:ae.id,v:ae.value,q:ae.value,open:!!(_cbx&&_cbx.inp===ae)};}cbxClose();const id=ae&&ae.id;let s0=null,s1=null;try{s0=ae.selectionStart;s1=ae.selectionEnd;}catch(e){}
   const mb=document.querySelector(".mbody");const mst=mb?mb.scrollTop:0;
   $("#app").innerHTML=page();$("#modal").innerHTML=S.boot==="ready"&&S.modal?modalHtml():"";posModal();enhanceSelects();try{mapaSync();}catch(e){console.warn(e);}
   const mb2=document.querySelector(".mbody");if(mb2)mb2.scrollTop=mst;
   if(id){const el=document.getElementById(id);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(s0!=null)el.setSelectionRange(s0,s1);}catch(e){}}}
-  placePlan();}
+  placePlan();if(S.missOn)marcarFalta();}
 window.addEventListener("resize",()=>placePlan());window.addEventListener("scroll",()=>placePlan(),{passive:true});
 function page(){if(S.boot==="nohost")return center("Sem ligação","Não foi possível ligar à base de dados. Recarregue a página.");
   if(S.boot==="nodb")return center("Sem acesso aos dados","Esta vista não consegue ligar à base de dados partilhada. Inicie sessão no Claude e abra a página a partir da ligação partilhada.");
