@@ -109,6 +109,7 @@ a.btn{text-decoration:none;color:inherit}
 .fld{display:flex;flex-direction:column;gap:4px;min-width:0}
 .fld>span{font-size:12px;font-weight:600;color:var(--muted)}
 .fld em{color:var(--bad);font-style:normal}
+tr.grp{cursor:pointer;background:var(--panel2)}tr.grp:hover{background:color-mix(in srgb,var(--accent) 8%,var(--panel2))}tr.grp td{padding:10px 12px}.grp-c{display:inline-block;width:1em}tr.sub td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
 .sup-box{border:1px dashed var(--line);border-radius:14px;padding:10px;margin:0 0 14px;background:var(--panel2)}.sup-h{font-weight:600;font-size:13px;margin:0 0 8px}
 .pc-mot{all:unset;cursor:pointer;border-bottom:1px dashed currentColor}.pc-mot:hover,.pc-mot:focus-visible{color:var(--accent)}.aus-t td{padding:4px 8px}
 .fld.miss>span{color:var(--bad)}.fld.miss input,.fld.miss select,.fld.miss textarea{border-color:var(--bad)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 22%,transparent)!important}
@@ -575,7 +576,7 @@ const CFG_DEF={toleranciaMin:0,duracaoPadraoH:4,jornadaH:10,jornadaMaxH:14,tCarg
 const COLS=["utilizadores","acessos","categorias","equipamentos","materiais","zonas","cfg","obras","viaturas","transportadoras","fornecedores","gestores","pedidos","notificacoes","sl","eliminados","convites","clientes","partidas","motoristas","encarregados","programacao"];
 
 /* ========== estado ========== */
-const S={todaFrota:(()=>{try{return localStorage.getItem("cpsa_todafrota")==="1";}catch(e){return false;}})(),sideOff:!!window.__sideOff,agSideOff:(()=>{try{return localStorage.getItem("cpsa_agside")==="off";}catch(e){return false;}})(),
+const S={pedAgr:(()=>{try{return localStorage.getItem("cpsa_pedagr")!=="0";}catch(e){return true;}})(),todaFrota:(()=>{try{return localStorage.getItem("cpsa_todafrota")==="1";}catch(e){return false;}})(),sideOff:!!window.__sideOff,agSideOff:(()=>{try{return localStorage.getItem("cpsa_agside")==="off";}catch(e){return false;}})(),
   boot:"loading", me:{id:null,isOwner:false,canEdit:false,canWrite:null,avatar:""},
   sim:null, route:"dashboard", menu:false, notifOpen:false,
   d:Object.fromEntries(COLS.map(c=>[c,[]])), loaded:{}, prof:{}, sort:{}, pg:{}, drill:{},
@@ -1049,10 +1050,13 @@ const pn=p=>`<span class="pn">${esc(numT(p))}</span>`;
 
 function tbl(id,cols,rows,o={}){const st=S.sort[id]||{k:o.k||cols[0].k,d:o.d||"asc"};const col=cols.find(c=>c.k===st.k)||cols[0];const sv=col.s||(r=>r[col.k]);
   rows=[...rows].sort((a,b)=>{let x=sv(a),y=sv(b);if(x==null||x==="")return 1;if(y==null||y==="")return -1;if(typeof x==="string")return x.localeCompare(String(y),"pt",{numeric:true})*(st.d==="asc"?1:-1);return (x>y?1:x<y?-1:0)*(st.d==="asc"?1:-1);});
-  const size=o.size||50,pg=Math.min(S.pg[id]||0,Math.max(0,Math.ceil(rows.length/size)-1)),sl=rows.slice(pg*size,pg*size+size);
-  const dc=o.del||DEL_COL[id];const body=sl.map(r=>`<tr ${o.row?`class="click" data-act="${o.row}" data-a="${esc(r.id)}"`:""} ${dc&&podeEliminar()?`data-del="${dc}|${esc(r.id)}"`:""}>${cols.map(c=>`<td class="${c.cls||""}">${c.v?c.v(r):esc(r[c.k])}</td>`).join("")}</tr>`).join("")||`<tr><td colspan="${cols.length}" class="muted">${esc(o.empty||"Sem registos.")}</td></tr>`;
+  let units=rows;if(o.group){const m=new Map();rows.forEach(r=>{const k=o.group.key(r);if(!m.has(k))m.set(k,[]);m.get(k).push(r);});units=[...m.entries()].map(([k,rs])=>({k,rs}));}
+  const size=o.size||50,pg=Math.min(S.pg[id]||0,Math.max(0,Math.ceil(units.length/size)-1)),sl=units.slice(pg*size,pg*size+size);
+  const dc=o.del||DEL_COL[id];const tr=(r,cls)=>`<tr ${o.row?`class="click ${cls||""}" data-act="${o.row}" data-a="${esc(r.id)}"`:(cls?`class="${cls}"`:"")} ${dc&&podeEliminar()?`data-del="${dc}|${esc(r.id)}"`:""}>${cols.map(c=>`<td class="${c.cls||""}">${c.v?c.v(r):esc(r[c.k])}</td>`).join("")}</tr>`;
+  const op=k=>!!((S.grpOpen||{})[id+"|"+k]);
+  const body=(o.group?sl.map(u=>u.rs.length===1?tr(u.rs[0]):`<tr class="grp ${op(u.k)?"open":""}" data-act="grpTog" data-a="${esc(id+"|"+u.k)}" aria-expanded="${op(u.k)}"><td colspan="${cols.length}"><span class="grp-c" aria-hidden="true">${op(u.k)?"▾":"▸"}</span> ${o.group.head(u.rs,u.k)}</td></tr>${op(u.k)?u.rs.map(r=>tr(r,"sub")).join(""):""}`):sl.map(r=>tr(r))).join("")||`<tr><td colspan="${cols.length}" class="muted">${esc(o.empty||"Sem registos.")}</td></tr>`;
   return `<div class="tw"><table><thead><tr>${cols.map(c=>`<th class="${c.cls||""}">${c.hd?c.hd:c.nosort?esc(c.l):`<button data-act="sort" data-a="${id}|${c.k}">${esc(c.l)}${st.k===c.k?(st.d==="asc"?" ▲":" ▼"):""}</button>`}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`+
-   (rows.length>size?`<div class="pager"><span>${pg*size+1}–${Math.min(rows.length,pg*size+size)} de ${rows.length}</span><button class="btn sm" data-act="page" data-a="${id}|-1" ${pg===0?"disabled":""}>Anterior</button><button class="btn sm" data-act="page" data-a="${id}|1" ${(pg+1)*size>=rows.length?"disabled":""}>Seguinte</button></div>`:"");}
+   (units.length>size?`<div class="pager"><span>${pg*size+1}–${Math.min(units.length,pg*size+size)} de ${units.length}${o.group?" obras":""}</span><button class="btn sm" data-act="page" data-a="${id}|-1" ${pg===0?"disabled":""}>Anterior</button><button class="btn sm" data-act="page" data-a="${id}|1" ${(pg+1)*size>=units.length?"disabled":""}>Seguinte</button></div>`:"");}
 
 function bars(items,o={}){if(!items.length)return `<div class="empty">${esc(o.empty||"Sem dados no período e filtros selecionados.")}</div>`;const max=Math.max(...items.map(i=>i.v),1);
   return `<div class="bars">${items.map(i=>{const tag=i.dk?"button":"div";return `<${tag} class="bar" ${i.dk?`data-act="drill" data-a="${esc(i.dk)}"`:""} title="${esc(i.l)}"><span class="lab">${esc(i.l)}</span><span class="track"><span class="fill ${i.c||""}" style="width:${(i.v/max*100).toFixed(1)}%"></span></span><span class="val">${esc(i.t??i.v)}</span></${tag}>`;}).join("")}</div>`;}
@@ -1157,10 +1161,18 @@ function pedCols(){return [{k:"numero",l:"Nº",v:p=>pn(p)},{k:"tipo",l:"Tipo",v:
 function pedTable(id,ps){const sel=id==="ped"&&podeEliminar();S.selPed=S.selPed||new Set();const vis=new Set(ps.map(p=>p.id));[...S.selPed].forEach(x=>{if(!M.ped[x])S.selPed.delete(x);});
   const n=S.selPed.size,todos=ps.length&&ps.every(p=>S.selPed.has(p.id));
   const cols=sel?[{k:"_sel",l:"",nosort:true,cls:"selc",hd:`<input type="checkbox" data-act="selAll" ${todos?"checked":""} aria-label="Selecionar todos">`,v:p=>`<input type="checkbox" data-act="selPed" data-a="${p.id}" ${S.selPed.has(p.id)?"checked":""} aria-label="Selecionar ${esc(numT(p))}">`}].concat(pedCols()):pedCols();
-  return (sel&&n?`<div class="selbar"><b>${n} pedido(s) selecionado(s)</b>${[...S.selPed].some(x=>!vis.has(x))?` <small class="muted">(alguns fora dos filtros atuais)</small>`:""}<span style="flex:1"></span><button class="btn sm ghost" data-act="selClr">Limpar seleção</button><button class="btn sm bad" data-act="delPeds">Eliminar selecionados</button></div>`:"")+tbl(id,cols,ps,{row:"ped",k:"numero",d:"desc",empty:"Nenhum pedido corresponde aos filtros."});}
+  return (sel&&n?`<div class="selbar"><b>${n} pedido(s) selecionado(s)</b>${[...S.selPed].some(x=>!vis.has(x))?` <small class="muted">(alguns fora dos filtros atuais)</small>`:""}<span style="flex:1"></span><button class="btn sm ghost" data-act="selClr">Limpar seleção</button><button class="btn sm bad" data-act="delPeds">Eliminar selecionados</button></div>`:"")+tbl(id,cols,ps,{row:"ped",k:"numero",d:"desc",empty:"Nenhum pedido corresponde aos filtros.",group:id==="ped"&&S.pedAgr!==false?{key:pedGrpKey,head:pedGrpHead}:null});}
+/* Lista de pedidos agrupada por obra: 1 linha por obra com vários pedidos (expansível); obra única = linha normal */
+const pedGrpKey=p=>p.obraId?"o:"+p.obraId:"c:"+normNome(p.cliente||p.localDescarga||p.id);
+function pedGrpHead(rs){const p=rs[0],o=M.obra[p.obraId];const nome=o?`${o.codigo} · ${o.nome}`:(p.cliente||p.localDescarga||"Sem obra");
+  const cnt=(arr,f)=>{const m=new Map();arr.forEach(x=>{const k=f(x);if(k)m.set(k,(m.get(k)||0)+1);});return [...m.entries()];};
+  const ests=cnt(rs,x=>x.estado).map(([e,n])=>`<span class="chip ${EST_CLS[e]||"c-idle"}">${n} ${esc(e)}</span>`).join(" ");
+  const tps=cnt(rs,x=>eqTxt(x)).map(([t,n])=>`${n}× ${esc(t)}`).join(" · ");
+  const ds=rs.map(x=>x.periodoInicio||x.pretendidaEm).filter(Boolean).sort();const per=ds.length?(dayKey(ds[0])===dayKey(ds[ds.length-1])?fmtD(ds[0]):`${fmtD(ds[0])} a ${fmtD(ds[ds.length-1])}`):"";
+  return `<b>${esc(nome)}</b> <span class="chip c-info">${rs.length} pedidos</span> ${ests} <span class="muted">· ${tps}${per?" · pretendido "+per:""}</span>`;}
 function vPedidos(){const f=S.f.ped;const ps=pedFilt();const users=S.d.utilizadores;
   return `<div class="phead"><div><h1>Pedidos de transporte</h1><p>${ps.length} pedido(s)${f.ids?` · filtro de análise: <b>${esc(f.idsLabel)}</b> <button class="btn sm" data-act="clrids">Remover</button>`:""}</p></div>
-   <div class="row">${can.log()?`<label class="btn" for="up_cis">Importar pedidos de cisternas (Excel)<input id="up_cis" type="file" accept=".xlsx,.xls" data-cis="1" hidden></label>`:""}<button class="btn" data-act="exp" data-a="ped|xlsx">Exportar Excel</button><button class="btn" data-act="exp" data-a="ped|pdf">Exportar PDF</button></div></div>
+   <div class="row">${can.log()?`<label class="btn" for="up_cis">Importar pedidos de cisternas (Excel)<input id="up_cis" type="file" accept=".xlsx,.xls" data-cis="1" hidden></label>`:""}<button class="btn ${S.pedAgr!==false?"pri":""}" data-act="pedAgr" aria-pressed="${S.pedAgr!==false}" title="Juntar numa linha os pedidos da mesma obra">${S.pedAgr!==false?"✓ Agrupado por obra":"Agrupar por obra"}</button><button class="btn" data-act="exp" data-a="ped|xlsx">Exportar Excel</button><button class="btn" data-act="exp" data-a="ped|pdf">Exportar PDF</button></div></div>
   <div class="filters">${fld("f.ped.q","Pesquisar",{live:true,ph:"nº, obra, matrícula…"})}${fld("f.ped.tipo","Tipo de pedido",{type:"select",opts:optTipos()})}${fld("f.ped.estado","Estado",{type:"select",opts:opt0().concat(ESTADOS.map(e=>[e,e]))})}${fld("f.ped.prioridade","Prioridade",{type:"select",opts:opt0("Todas").concat(PRIOS)})}
    ${fld("f.ped.zona","Zona",{type:"select",opts:optZonas("Todas")})}${fld("f.ped.obra","Obra",{type:"select",opts:optObras("Todas",true)})}${fld("f.ped.cat","Categoria",{type:"select",opts:optCats("Todas")})}${fld("f.ped.eq","Equipamento",{type:"select",opts:optEqs(f.cat)})}
    ${fld("f.ped.mat","Material ou máquina",{type:"select",opts:opt0().concat(S.d.materiais.map(m=>[m.id,m.nome]))})}${fld("f.ped.origem","Origem",{type:"select",opts:optOrig})}${fld("f.ped.transp","Transportadora",{type:"select",opts:optTransp("Todas")})}
@@ -2481,6 +2493,8 @@ const A={
   supTog(k){S.supOpen=S.supOpen||{};S.supOpen[k]=!S.supOpen[k];render();if(S.supOpen[k])setTimeout(()=>{const el=document.getElementById("sup_"+k);if(el)el.scrollIntoView({behavior:"smooth",block:"nearest"});},60);},
   async setEixos(a){if(!can.defs())return;const[id,n]=a.split("|");const v=M.via[id];if(!v)return;const nv=vEixos(v)===+n?null:+n;
     await W(()=>db.doc("viaturas/"+id).update({eixos:nv,alteradoEm:nowISO(),alteradoPor:S.me.id}),nv?`${v.matricula||v.ident}: ${nv} eixos.`:`${v.matricula||v.ident}: eixos por definir.`);v.eixos=nv;render();},
+  grpTog(a){S.grpOpen=S.grpOpen||{};S.grpOpen[a]=!S.grpOpen[a];render();},
+  pedAgr(){S.pedAgr=S.pedAgr===false;try{localStorage.setItem("cpsa_pedagr",S.pedAgr?"1":"0");}catch(e){}render();},
   todaFrota(){S.todaFrota=!S.todaFrota;try{localStorage.setItem("cpsa_todafrota",S.todaFrota?"1":"0");}catch(e){}render();},
   agSide(){S.agSideOff=!S.agSideOff;try{localStorage.setItem("cpsa_agside",S.agSideOff?"off":"on");}catch(e){}render();},
   planoVista(v){S.planoVista=v;try{localStorage.setItem("cpsa_plano",v);}catch(e){}render();}, notif(){S.notifOpen=!S.notifOpen;render();},
