@@ -517,6 +517,8 @@ aplicaTema(temaAtual());
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const nowISO=()=>new Date().toISOString();
+/* Pesquisa: ignora maiúsculas e também hífens, espaços e pontos (42ff75 encontra 42-FF-75) */
+Object.defineProperty(String.prototype,"qInc",{value:function(q){const h=String(this).toLowerCase(),n=String(q==null?"":q).toLowerCase().trim();if(!n||h.includes(n))return true;const c=x=>x.replace(/[\s\-.\/_·|]+/g,"");const cn=c(n);return !!cn&&c(h).includes(cn);},enumerable:false,configurable:true,writable:true});
 const rid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const TZ="Europe/Lisbon";
@@ -572,7 +574,7 @@ const CFG_DEF={toleranciaMin:0,duracaoPadraoH:4,jornadaH:10,jornadaMaxH:14,tCarg
 const COLS=["utilizadores","acessos","categorias","equipamentos","materiais","zonas","cfg","obras","viaturas","transportadoras","fornecedores","gestores","pedidos","notificacoes","sl","eliminados","convites","clientes","partidas","motoristas","encarregados","programacao"];
 
 /* ========== estado ========== */
-const S={sideOff:!!window.__sideOff,agSideOff:(()=>{try{return localStorage.getItem("cpsa_agside")==="off";}catch(e){return false;}})(),
+const S={todaFrota:(()=>{try{return localStorage.getItem("cpsa_todafrota")==="1";}catch(e){return false;}})(),sideOff:!!window.__sideOff,agSideOff:(()=>{try{return localStorage.getItem("cpsa_agside")==="off";}catch(e){return false;}})(),
   boot:"loading", me:{id:null,isOwner:false,canEdit:false,canWrite:null,avatar:""},
   sim:null, route:"dashboard", menu:false, notifOpen:false,
   d:Object.fromEntries(COLS.map(c=>[c,[]])), loaded:{}, prof:{}, sort:{}, pg:{}, drill:{},
@@ -808,7 +810,7 @@ function filtroGestor(p,id,comCriador){const g=M.gest&&M.gest[id];if(g)return ge
 function obraVisivel(o){if(role()!=="obra")return true;return gestorUser(o)===S.me.id||o.criadoPor===S.me.id;}
 /* Gestor de logística com cobertura configurada (Configurações › Gestores responsáveis): só vê os pedidos e as viaturas da sua cobertura */
 function meuGestor(){if(role()!=="logistica"||!S.me.id||!S.d.gestores)return null;return S.d.gestores.find(g=>gAtivo(g)&&!gSemCob(g)&&pessoaLog(g)?.id===S.me.id)||null;}
-function pedidoVisivel(p){if(role()==="logistica"){const G=meuGestor();if(!G)return true;const via=p.recurso&&p.recurso.viaturaId;
+function pedidoVisivel(p){if(role()==="logistica"){const G=S.todaFrota?null:meuGestor();if(!G)return true;const via=p.recurso&&p.recurso.viaturaId;
     return gestorCobrePedido(G,p)||logIds(p).includes(S.me.id)||logIds(p).includes("g:"+G.id)||p.criadoPor===S.me.id||(!p.equipamentoId&&!catOf(p)&&!via);}
   if(role()!=="obra")return true;const o=M.obra[p.obraId];return p.criadoPor===S.me.id||(o&&obraVisivel(o));}
 function podeEditar(p){if(FINAIS.includes(p.estado))return false;if(["Rascunho","Devolvido para correção"].includes(p.estado))return p.criadoPor===S.me.id||can.log();if(can.log())return true;return p.criadoPor===S.me.id&&["Pendente de aprovação","Aprovado","Por agendar"].includes(p.estado);}
@@ -1099,8 +1101,8 @@ function view(){if(!navVisible(S.route||"dashboard")){const first=[...NAV.flatMa
 function denied(){return `<div class="empty">O seu perfil não tem acesso a esta área.</div>`;}
 
 /* ========== pesquisa global ========== */
-function matchQ(p,q){const r=p.recurso||{};const o=M.obra[p.obraId]||{};return [p.numero,o.codigo,o.nome,r.matricula,M.via[r.viaturaId]?.matricula,M.via[r.viaturaId]?.ident,eqTxt(p),matDesc(p),TIPO[p.tipo]?.n,p.fornecedorNome,p.box,M.tr[r.transportadoraId]?.nome].join(" ").toLowerCase().includes(q);}
-function viewSearch(){const q=S.gq.trim().toLowerCase();const ps=scope().filter(p=>matchQ(p,q));const os=S.d.obras.filter(o=>obraVisivel(o)&&`${o.codigo} ${o.nome} ${o.cliente||""}`.toLowerCase().includes(q));
+function matchQ(p,q){const r=p.recurso||{};const o=M.obra[p.obraId]||{};return [p.numero,o.codigo,o.nome,r.matricula,M.via[r.viaturaId]?.matricula,M.via[r.viaturaId]?.ident,eqTxt(p),matDesc(p),TIPO[p.tipo]?.n,p.fornecedorNome,p.box,M.tr[r.transportadoraId]?.nome].join(" ").toLowerCase().qInc(q);}
+function viewSearch(){const q=S.gq.trim().toLowerCase();const ps=scope().filter(p=>matchQ(p,q));const os=S.d.obras.filter(o=>obraVisivel(o)&&`${o.codigo} ${o.nome} ${o.cliente||""}`.toLowerCase().qInc(q));
   return `<div class="phead"><div><h1>Resultados para “${esc(S.gq.trim())}”</h1><p>${ps.length} pedido(s) e ${os.length} obra(s).</p></div><button class="btn" data-act="clrq">Limpar pesquisa</button></div>
   ${pedTable("srch",ps)}${os.length?`<h2>Obras</h2>${tbl("srcho",[{k:"codigo",l:"Código",v:o=>`<span class="pn">${esc(o.codigo)}</span>`},{k:"nome",l:"Obra"}],os,{row:"obraDet"})}`:""}`;}
 
@@ -1310,7 +1312,7 @@ function secObs(F){return `<section class="form-sec"><header><span class="k">${F
   <p class="muted full" style="margin:0">A origem do transporte (frota própria ou externa), a viatura, o motorista e os custos são definidos pela Logística no agendamento.</p></div></section>`;}
 function maqPicker(F){if(!CAT().length)return `<div class="note warn full">A lista de equipamentos não carregou. Recarregue a página.</div>`;
   const q=(F.maqQ||"").trim().toLowerCase(),cl=F.maqClasse||"",sel=new Set(F.maquinas);
-  const list=CAT().filter(e=>(!cl||e.classe===cl)&&(!q||(e.num+" "+e.marca+" "+e.modelo+" "+e.tipo+" "+e.classe+" "+e.desc).toLowerCase().includes(q)));const shown=list.slice(0,80);
+  const list=CAT().filter(e=>(!cl||e.classe===cl)&&(!q||(e.num+" "+e.marca+" "+e.modelo+" "+e.tipo+" "+e.classe+" "+e.desc).toLowerCase().qInc(q)));const shown=list.slice(0,80);
   return `<div class="full maqpick"><div class="grid g2">${fld("form.maqClasse","Tipo de equipamento",{type:"select",opts:[["","Todos os tipos"]].concat(maqClasses().map(c=>[c,c]))})}${fld("form.maqQ","Procurar máquina",{live:true,ph:"nº, marca, modelo ou matrícula"})}</div>
   ${PS.groups.length?`<div class="row"><small>Grupos recorrentes:</small>${PS.groups.map(g=>`<button class="btn sm" data-act="maqGrupo" data-a="${esc(g.id)}">${esc(g.nome)}</button>`).join("")}</div>`:""}
   <div class="mlist" role="listbox" aria-multiselectable="true" aria-label="Lista de equipamentos">${shown.map(e=>{const s=specOf(e),on=sel.has(e.num);return `<button type="button" class="mrow ${on?"on":""}" data-act="maqTog" data-a="${esc(e.num)}" role="option" aria-selected="${on}"><span class="ck">${on?"✓":""}</span><span class="mt"><b>${esc(maqLabel(e))}</b><small>${esc(e.classe)}${e.desc?" · "+esc(e.desc):""}</small></span><span class="num">${tn(s.peso)} t · ${s.c} × ${s.l} × ${s.a} m${s.est?" *":""}</span></button>`;}).join("")||`<div class="empty">Nenhuma máquina corresponde à pesquisa.</div>`}</div>
@@ -1435,8 +1437,8 @@ const viaTxtN=v=>v?normNome([v.matricula,v.ident,v.virtual?v.pm.id:"",vTag(v),vR
 const obraTxtN=p=>{const o=M.obra[p.obraId];return normNome([o?o.codigo+" "+o.nome+" "+(o.cliente||""):"",p.cliente||"",p.localDescarga||""].join(" "));};
 const pedTxtN=p=>normNome([p.numero,obraTxtN(p),destTxt(p),matDesc(p),p.localCarga,p.recurso?.motorista,p.recurso?.matricula,eqTxt(p),TIPO[p.tipo]?.n,p.estado].join(" "));
 function agFilt(list){const f=S.f.ag;const q=normNome(f.q||""),oq=normNome(f.obraQ||""),vq=normNome(f.viaQ||"");const VA=(q||vq)?new Map(viaturasAll().map(v=>[v.id,v])):null;const via=p=>p.recurso&&p.recurso.viaturaId?VA.get(p.recurso.viaturaId):null;
-  return list.filter(p=>(!f.cat||catOf(p)===f.cat)&&(!f.eq||eqIn(f.eq,p.equipamentoId))&&(!f.gestor||filtroGestor(p,f.gestor))&&(!oq||obraTxtN(p).includes(oq))
-    &&(!vq||!(p.recurso&&p.recurso.viaturaId)||viaTxtN(via(p)).includes(vq))&&(!q||pedTxtN(p).includes(q)||viaTxtN(via(p)).includes(q)));}
+  return list.filter(p=>(!f.cat||catOf(p)===f.cat)&&(!f.eq||eqIn(f.eq,p.equipamentoId))&&(!f.gestor||filtroGestor(p,f.gestor))&&(!oq||obraTxtN(p).qInc(oq))
+    &&(!vq||!(p.recurso&&p.recurso.viaturaId)||viaTxtN(via(p)).qInc(vq))&&(!q||pedTxtN(p).qInc(q)||viaTxtN(via(p)).qInc(q)));}
 function evHtml(p,o={}){const r=p.recurso||{};const cls=(r.origem==="externa"?"ext":r.origem==="propria"&&r.viaturaId?"":"none")+(p.combId?" comb":"");
   if(o.day)return `<button class="ev ${cls} ${p.prioridade==="urgente"?"urg":""}" data-act="ped" data-a="${p.id}"><span class="t">${o.dia&&dayKey(p.previstoInicio)!==o.dia?"cont.":fmtT(p.previstoInicio)}</span><span><b>${esc(p.numero)}</b> ${chipE(p.estado)} ${chipP(p.prioridade)}${chipX(p)}<br><b style="font-family:var(--f-body);font-size:13px">${esc(destTxt(p))}</b><span class="x">${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")}</span><span class="x">${chipO(p)} ${esc(recursoTxt(p))}${r.motorista?` · ${esc(r.motorista)}`:""}${p.previstoFim?` · até ${fmtT(p.previstoFim)}`:""}</span></span></button>`;
   return `<button class="ev ${cls} ${p.prioridade==="urgente"?"urg":""}" data-act="ped" data-a="${p.id}" title="${esc(p.numero+" · "+destTxt(p))}"><b>${o.dia&&dayKey(p.previstoInicio)!==o.dia?"cont.":fmtT(p.previstoInicio)} ${esc(p.numero)}</b>${emAtraso(p)?' <span class="chip c-bad">atraso</span>':""}${chipComb(p,true)}<span class="x">${esc(eqTxt(p))}</span><span class="x">${esc(recursoTxt(p))}</span></button>`;}
@@ -1461,7 +1463,7 @@ function vAgenda(o={}){const f=S.f.ag;S._fin=!!o.final;if(!o.final&&f.vista==="w
   <div class="filters">${fld("f.ag.q","Pesquisar",{live:true,ph:"nº pedido, obra, matrícula, motorista, material…"})}${(()=>{const G=f.gestor&&M.gest[f.gestor];const eqO=G&&gEq(G).length?eqs("",true).filter(e=>gEq(G).includes(e.id)):eqs("",true);
      return fld("f.ag.gestor","Gestor responsável",{type:"select",opts:optGestores()})+fld("f.ag.eq","Tipo de viatura",{type:"select",opts:optTipoViatura(eqO)});})()}
    ${fld("f.ag.obraQ","Obra",{live:true,ph:"código ou nome"})}${fld("f.ag.viaQ","Viatura",{live:true,ph:"matrícula, tipo ou motorista"})}
-   ${f.vista==="plano"?fld("f.ag.soCargas","Só viaturas com cargas",{type:"check"}):""}<button class="btn ghost" data-act="clrf" data-a="ag">Limpar</button></div>
+   ${f.vista==="plano"?fld("f.ag.soCargas","Só viaturas com cargas",{type:"check"}):""}${meuGestor()?`<button class="btn ${S.todaFrota?"pri":""}" data-act="todaFrota" aria-pressed="${S.todaFrota}" title="${S.todaFrota?"Voltar a ver só as viaturas e pedidos da sua cobertura":"Mostrar todas as viaturas e pedidos, de todas as sedes e zonas"}">${S.todaFrota?"✓ Toda a frota":"Ver toda a frota"}</button>`:""}<button class="btn ghost" data-act="clrf" data-a="ag">Limpar</button></div>
   ${(()=>{const side=can.log()&&!S.agSideOff&&!o.final;return `<div class="ag-layout${side?"":" no-side"}">${side?`<aside class="ag-side" data-dropback="1" aria-label="Pedidos por agendar"><div class="ph"><h3>Por agendar <span class="muted">(${porAg.length})</span></h3><button class="btn sm ghost" data-act="agSide" title="Ocultar painel" aria-label="Ocultar painel">◀</button></div>
    ${porAg.length?`${agSelBar(porAg)}<div class="ag-list">${porAg.map(p=>`<div class="ag-it ${p.combId?"comb":""} ${S.agSel&&S.agSel.has(p.id)?"sel":""}" draggable="true" data-drag="${p.id}" title="Arraste para uma viatura do plano para agendar · Ctrl+clique para selecionar · botão direito para combinar"><div class="row">${can.log()?`<input type="checkbox" class="ag-ck" data-act="agSel" data-a="${p.id}" ${S.agSel&&S.agSel.has(p.id)?"checked":""} aria-label="Selecionar ${esc(p.numero)} para combinar">`:""}${pn(p)} ${chipT(p)} ${chipP(p.prioridade)}${chipX(p)}</div><b>${esc(destTxt(p))}</b><span>${esc(eqTxt(p))} · ${esc(matDesc(p)||"—")}</span><small>Pretendido ${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</small><div class="row"><button class="btn sm pri" data-act="agendar" data-a="${p.id}">Agendar</button><button class="btn sm" data-act="ped" data-a="${p.id}">Detalhe</button></div></div>`).join("")}</div>`:`<div class="empty">Nenhum pedido à espera de agendamento.</div>`}</aside>`:""}<div class="ag-main">`;})()}
   <div class="row">${can.log()&&S.agSideOff&&!o.final?`<button class="btn" data-act="agSide" data-dropback="1" title="Mostrar pedidos por agendar">Por agendar (${porAg.length}) ▸</button>`:""}<button class="btn" data-act="agNav" data-a="-1" aria-label="Anterior">◀</button><button class="btn" data-act="agNav" data-a="0">Hoje</button><button class="btn" data-act="agNav" data-a="1" aria-label="Seguinte">▶</button>${fld("f.ag.data","Ir para",{type:"date"})}${title?`<h2 style="margin-left:8px">${esc(title)}</h2>`:""}
@@ -1514,7 +1516,7 @@ function optTipoViatura(lista,todos){const L=lista||eqs("",true);const out=[["",
 const vEqs=v=>(v.equipamentos&&v.equipamentos.length)?v.equipamentos:(v.equipamentoId?[v.equipamentoId]:[]);
 function vReboques(v){return v.virtual?(v.pm.pm||""):(v.reboques||[]).map(b=>b.matricula).join(" / ");}
 function vTag(v){const e=vEqs(v).map(eqName).filter(x=>x!=="—");return e.length?e.join(" / "):(v.tipoTxt||(v.unidade==="rigido"?"Rígido":"Sem tipo definido"));}
-const unidadesPlano=()=>{const G=meuGestor();return viaturasAll().filter(v=>v.ativo!==false&&v.unidade!=="reboque"&&(!G||gestorCobreViatura(G,v)));};
+const unidadesPlano=()=>{const G=S.todaFrota?null:meuGestor();return viaturasAll().filter(v=>v.ativo!==false&&v.unidade!=="reboque"&&(!G||gestorCobreViatura(G,v)));};
 function diasDoPedido(p){if(!p.previstoInicio)return[];const a=dayKey(p.previstoInicio),b=p.previstoFim?dayKey(p.previstoFim):a;const out=[];let k=a,g=0;while(k<=b&&g++<62){out.push(k);k=addDays(k,1);}return out;}
 function optGestores(){const gs=S.d.gestores.filter(g=>g.ativo!==false);if(gs.length)return opt0().concat(gs.map(g=>[g.id,g.nome]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));
   const ids=new Set([...S.d.utilizadores.filter(u=>u.ativo!==false).map(u=>u.id),...S.d.obras.map(o=>o.gestorId).filter(Boolean)]);wantProf([...ids]);return opt0().concat([...ids].map(i=>[i,nome(i)]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));}
@@ -1528,7 +1530,7 @@ function planoData(opt={}){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
     .concat(opt.comPendentes?ps.filter(p=>["Pendente de aprovação","Aprovado","Por agendar"].includes(p.estado)&&refDia(p)&&dayKey(refDia(p))===dia):[]);
   const cand=scope().filter(p=>["Aprovado","Por agendar"].includes(p.estado)).concat(porAtribuir.filter(p=>PLAN.includes(p.estado))).sort((a,b)=>String(refDia(a)).localeCompare(String(refDia(b))));
   const restr=f.obra||f.tipo||f.cat||f.obraQ;const G=f.gestor&&M.gest[f.gestor];const fq=normNome(f.q||""),fvq=normNome(f.viaQ||"");
-  let vs=unidadesPlano();if(f.viatura)vs=vs.filter(v=>v.id===f.viatura);if(fvq)vs=vs.filter(v=>viaTxtN(v).includes(fvq));if(fq)vs=vs.filter(v=>viaTxtN(v).includes(fq)||porVia.has(v.id));if(G)vs=vs.filter(v=>gestorCobreViatura(G,v)||porVia.has(v.id));if(f.empresa)vs=vs.filter(v=>vEmpresa(v)===f.empresa);if(f.zona)vs=vs.filter(v=>vZona(v)===f.zona||porVia.has(v.id));
+  let vs=unidadesPlano();if(f.viatura)vs=vs.filter(v=>v.id===f.viatura);if(fvq)vs=vs.filter(v=>viaTxtN(v).qInc(fvq));if(fq)vs=vs.filter(v=>viaTxtN(v).qInc(fq)||porVia.has(v.id));if(G)vs=vs.filter(v=>gestorCobreViatura(G,v)||porVia.has(v.id));if(f.empresa)vs=vs.filter(v=>vEmpresa(v)===f.empresa);if(f.zona)vs=vs.filter(v=>vZona(v)===f.zona||porVia.has(v.id));
   if(f.eq)vs=vs.filter(v=>vEqs(v).some(e=>eqIn(f.eq,e))||(!opt.todas&&porVia.has(v.id)));
   if(!opt.todas&&(restr||f.soCargas))vs=vs.filter(v=>porVia.has(v.id));
   if(f.origem==="externa")vs=[];
@@ -1696,7 +1698,7 @@ function vDistrib(){const R=role();if(R==="obra")return denied();S.dist=S.dist||
    <div class="tabs" role="tablist">${[["conj","Conjuntos"],["lig","Ligações permitidas"],["mot","Motoristas"]].map(v=>`<button class="${D.v===v[0]?"on":""}" data-act="distSet" data-a="v|${v[0]}">${v[1]}</button>`).join("")}</div></div>`;
   return head+(D.v==="lig"?distLig(D,adm):D.v==="mot"?distMot(D,ed):distConj(D,ed));}
 function distConj(D,ed){const emp=D.emp,q=normNome(D.q||"");const pool=poolReboques(),mots=motoristasLista();
-  const hit=v=>!q||normNome([v.matricula,v.motorista,vReboques(v),v.tipoTxt,vTag(v)].join(" ")).includes(q);
+  const hit=v=>!q||normNome([v.matricula,v.motorista,vReboques(v),v.tipoTxt,vTag(v)].join(" ")).qInc(q);
   const T=motTratores().filter(v=>v.empresa===emp&&hit(v)).sort((a,b)=>vTag(a).localeCompare(vTag(b),"pt")||String(a.matricula).localeCompare(b.matricula));
   const Rg=motRigidos().filter(v=>v.empresa===emp&&hit(v)).sort((a,b)=>String(a.matricula).localeCompare(b.matricula));
   const livres=[...pool.values()].filter(x=>!x.trator&&(x.empresa===emp||!x.empresa));
@@ -1729,7 +1731,7 @@ function distConj(D,ed){const emp=D.emp,q=normNome(D.q||"");const pool=poolReboq
 function distLig(D,adm){const emp=D.emp,L=ligTab(emp),pool=poolReboques();
   const imp=adm?`<label class="btn sm" for="up_lig">Importar tabela de ligações (Excel)<input id="up_lig" type="file" accept=".xlsx,.xlsm,.xls" data-lig="1" hidden></label>`:"";
   if(!L)return `<div class="panel newcard"><p><b>${emp} ainda não tem tabela de ligações permitidas.</b></p><p class="muted">Sem tabela, qualquer reboque pode ir com qualquer trator. Importe o Excel (matrículas dos reboques numa linha, dos tratores numa coluna, X nas ligações permitidas — o mesmo do Custo de Fretes) ou crie a tabela a partir dos conjuntos atuais.</p><div class="row">${imp}${adm?`<button class="btn sm pri" data-act="ligCriar" data-a="${emp}">Criar a partir da frota atual</button>`:""}</div>${adm?"":`<p class="muted"><small>Só o administrador altera esta tabela.</small></p>`}</div>`;
-  const X=new Set(L.X||[]);const q=normNome(D.q||"");const Ts=L.T.filter(t=>!q||normNome(t.l).includes(q));
+  const X=new Set(L.X||[]);const q=normNome(D.q||"");const Ts=L.T.filter(t=>!q||normNome(t.l).qInc(q));
   const curT=new Map();motTratores().forEach(t=>(t.reboques||[]).forEach(b=>curT.set(plateKey(t.matricula)+"|"+plateKey(b.matricula),1)));
   return `<div class="row" style="margin-bottom:8px;justify-content:space-between"><div class="row"><input class="in" type="search" placeholder="Procurar trator…" id="dq" value="${esc(D.q||"")}" data-b="dist.q" data-r style="max-width:260px" aria-label="Procurar trator"><span class="muted">${L.T.length} tratores × ${L.R.length} reboques · ${X.size} ligações permitidas${L.fonte?` · origem: ${esc(L.fonte)}`:""}</span></div><div class="row">${imp}${adm?`<button class="btn sm ghost" data-act="ligSync" data-a="${emp}" title="Acrescenta à tabela os tratores e reboques da frota que ainda não estão">Acrescentar viaturas novas</button>`:""}</div></div>
    <div class="panel" style="padding:0"><div class="lnk-wrap"><table class="lnk"><thead><tr><th class="lbl">Trator \\ Reboque</th>${L.R.map(r=>`<th class="v"><span>${esc(r.l)}${pool.get(r.k)?` · ${esc(rebTxt(pool.get(r.k)))}`:""}</span></th>`).join("")}</tr></thead>
@@ -1796,7 +1798,7 @@ function vFrota(){if(role()==="obra")return denied();const ff=S.f.frota;const co
   const use=id=>conc.filter(p=>p.recurso?.viaturaId===id).length;const next=id=>scope().filter(p=>p.estado==="Agendado"&&p.recurso?.viaturaId===id&&p.previstoInicio>=nowISO()).sort((a,b)=>a.previstoInicio.localeCompare(b.previstoInicio))[0];
   const DISP={disponivel:["Disponível","c-ok"],indisponivel:["Indisponível","c-bad"],manutencao:["Em manutenção","c-warn"]};
   const q=ff.q.trim().toLowerCase();const reais=S.d.viaturas.filter(v=>v.unidade!=="reboque");const _atr=new Set(reais.flatMap(v=>(v.reboques||[]).map(b=>plateKey(b.matricula))));const soltos=S.d.viaturas.filter(v=>v.unidade==="reboque"&&v.ativo!==false&&!_atr.has(plateKey(v.matricula)));
-  const vs=reais.filter(v=>(!ff.empresa||v.empresa===ff.empresa)&&(!ff.zona||(ff.zona==="_sem"?!v.zonaId:v.zonaId===ff.zona))&&(!ff.eq||(ff.eq!=="_sem"&&vEqs(v).some(e=>eqIn(ff.eq,e)))||(ff.eq==="_sem"&&!vEqs(v).length))&&(!q||[v.matricula,v.ident,vReboques(v),v.motorista,v.sede,v.tipoTxt].join(" ").toLowerCase().includes(q)));
+  const vs=reais.filter(v=>(!ff.empresa||v.empresa===ff.empresa)&&(!ff.zona||(ff.zona==="_sem"?!v.zonaId:v.zonaId===ff.zona))&&(!ff.eq||(ff.eq!=="_sem"&&vEqs(v).some(e=>eqIn(ff.eq,e)))||(ff.eq==="_sem"&&!vEqs(v).length))&&(!q||[v.matricula,v.ident,vReboques(v),v.motorista,v.sede,v.tipoTxt].join(" ").toLowerCase().qInc(q)));
   const pmT=PS.pm.length?`<div class="panel"><div class="ph"><h3>Conjuntos porta-máquinas (${PS.pm.length})</h3><a class="btn sm" href="#planeamento">Editar no Auxílio ao planeamento de máquinas</a></div>
    ${tbl("pmc",[{k:"id",l:"Conjunto",v:p=>`<b>${esc(p.id)}</b>`},{k:"trator",l:"Trator",v:p=>p.trator?`<span class="plate">${esc(p.trator)}</span>`:"—"},{k:"pm",l:"Porta-máquinas",v:p=>esc(p.pm||"—")},{k:"mot",l:"Motorista"},{k:"zona",l:"Zona",v:p=>{const z=(CFG().pmZonas||{})[p.id];return `${z?esc(M.zona[z]?.nome||"—"):'<span class="muted">Por definir</span>'}${realRole()==="admin"?` <button class="btn sm ghost" data-act="pmZona" data-a="${esc(p.id)}">Alterar</button>`:""}`;},nosort:true},
     {k:"cap",l:"Capacidade útil",cls:"r",v:p=>`<span class="num">${tn(p.cap)} t</span>`},{k:"comp",l:"Comp. de carga",cls:"r",v:p=>`<span class="num">${fmtM(pmLen(p))}</span>`,s:p=>pmLen(p)},
@@ -1876,7 +1878,7 @@ function progSel(){const ws=progSemanas();if(!ws.length)return null;const hoje=P
 function encObrasDia(encId,dia){const w=(S.d.programacao||[]).find(x=>x.id===PROG.semKey(dia));if(!w)return[];return (w.linhas||[]).filter(l=>l.encId===encId).flatMap(l=>(l.dias||{})[dia]||[]);}
 const progEntTxt=e=>e.tipo==="ausente"?`Ausente${e.motivo?" ("+e.motivo+")":""}`:`${e.nome}${e.codigo?" #"+e.codigo:""}`;
 function encHtml(){const ed=can.obra(),q=normNome(S.f.obras.encQ||"");const hoje=todayKey();
-  const rows=encList().filter(e=>!q||normNome([e.nome,e.telemovel,e.tag,...(e.aliases||[])].join(" ")).includes(q));
+  const rows=encList().filter(e=>!q||normNome([e.nome,e.telemovel,e.tag,...(e.aliases||[])].join(" ")).qInc(q));
   return `<div class="row" style="justify-content:space-between;align-items:flex-end"><div class="filters" style="margin:0">${fld("f.obras.encQ","Pesquisar",{live:true,ph:"nome, telemóvel, nome na programação"})}</div>
     <div class="row">${ed?`<label class="btn" for="up_encx">Importar contactos (Excel)<input id="up_encx" type="file" accept=".xlsx,.xls" data-encx="1" hidden></label>${encDup().length?`<button class="btn" data-act="encDupOpen">Juntar duplicados (${encDup().reduce((s,g)=>s+g.outros.length,0)})</button>`:""}<button class="btn pri" data-act="enc" data-a="">+ Novo encarregado</button>`:""}</div></div>
    ${(S.d.encarregados||[]).length?tbl("enc",[{k:"nome",l:"Encarregado",v:e=>`<b>${esc(e.nome)}</b>${e.ativo===false?' <span class="chip c-idle">Inativo</span>':""}${e.tag?` <small class="muted">${esc(e.tag)}</small>`:""}`},
@@ -2007,7 +2009,7 @@ function obrasDupHtml(m,wrap){const G=obrasDup();if(!G.length)return wrap(`<h2>O
   return wrap(`<h2>Obras duplicadas (${G.length} código${G.length===1?"":"s"})</h2>`,`<p class="muted" style="margin-top:0">Para cada código fica um só registo (por defeito o mais completo). Os pedidos e os pontos de partida das outras passam para ele, os campos vazios são completados com os dados das outras, e as outras são eliminadas com cópia no Registo de eliminações (podem ser restauradas).</p>${blocos}
    <div class="note">${nObr?`Vai juntar ${G.filter(g=>m.inc[g.k]!==false).length} código(s): <b>${nObr} obra(s) eliminada(s)</b>, <b>${nPed} pedido(s)</b> passam para a obra mantida.`:"Nenhum código selecionado."}</div>${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
    `<button class="btn" data-act="close">Cancelar</button>${nObr?`<button class="btn pri" data-act="dupJuntar">Juntar ${nObr} obra(s)</button>`:""}`);}
-function vObras(){const f=S.f.obras,q=f.q.trim().toLowerCase();const os=S.d.obras.filter(o=>obraVisivel(o)&&(f.estado===""||(f.estado==="ativa")===(o.ativa!==false))&&(!q||`${o.codigo} ${o.nome} ${o.cliente||""} ${o.morada||""}`.toLowerCase().includes(q)));
+function vObras(){const f=S.f.obras,q=f.q.trim().toLowerCase();const os=S.d.obras.filter(o=>obraVisivel(o)&&(f.estado===""||(f.estado==="ativa")===(o.ativa!==false))&&(!q||`${o.codigo} ${o.nome} ${o.cliente||""} ${o.morada||""}`.toLowerCase().qInc(q)));
   const ps=scope();const st=o=>{const a=ps.filter(p=>p.obraId===o.id);return{a,x:extStats(a)};};
   const tabsOC=`<div class="tabs">${[["obras","Obras"],["clientes","Cisternas"],["enc","Encarregados"],["prog","Programação semanal"]].map(([k,l])=>`<button class="${(f.tab||"obras")===k?"on":""}" data-act="tab" data-a="obras|${k}">${l}</button>`).join("")}</div>`;
   if(f.tab==="enc")return `<div class="phead"><div><h1>Obras/Clientes</h1><p>${(S.d.encarregados||[]).filter(e=>e.ativo!==false).length} encarregado(s) ativo(s).</p></div></div>${tabsOC}${encHtml()}`;
@@ -2026,7 +2028,7 @@ function vCatalogo(){const f=S.f.cat;const ad=can.admin(),lg=can.log();const tab
   if(f.tab==="viaturas"){body=`${ad?`<div class="row" style="justify-content:flex-end"><button class="btn pri" data-act="equip" data-a="">+ Nova viatura ou equipamento</button></div>`:""}
    <div class="grid g3">${cats(true).map(c=>`<div class="panel"><div class="ph"><h3>${esc(c.nome)}</h3>${c.ativo===false?'<span class="chip c-idle">Inativa</span>':""}</div><div class="tl">${eqs(c.id,true).map(e=>`<div style="grid-template-columns:1fr auto"><span>${ad?`<button class="btn sm ghost" style="padding:0;font-weight:600" data-act="equip" data-a="${e.id}" data-del="equipamentos|${e.id}">${esc(e.nome)}</button>`:`<b>${esc(e.nome)}</b>`}${e.ativo===false?' <span class="chip c-idle">Inativo</span>':""}${(e.variantes||[]).length?`<br><small>${e.variantes.map(esc).join(" · ")}</small>`:""}</span><span>${e.recolha?'<span class="chip c-info">Recolha</span>':""}</span></div>`).join("")||'<div class="muted">Sem equipamentos.</div>'}</div></div>`).join("")}</div>
    <div class="def">Esta hierarquia é a 1.ª questão do pedido “Atribuir viatura”. “Recolha” marca os equipamentos que aparecem em “Recolher material”. As variantes escolhem-se depois do equipamento.</div>`;}
-  else if(f.tab==="maquinas"){const q=f.q.trim().toLowerCase();const ms=CAT().filter(e=>(!f.cls||e.classe===f.cls)&&(!q||(e.num+" "+e.marca+" "+e.modelo+" "+e.desc).toLowerCase().includes(q))).map(e=>({...e,id:e.num,s:specOf(e)}));
+  else if(f.tab==="maquinas"){const q=f.q.trim().toLowerCase();const ms=CAT().filter(e=>(!f.cls||e.classe===f.cls)&&(!q||(e.num+" "+e.marca+" "+e.modelo+" "+e.desc).toLowerCase().qInc(q))).map(e=>({...e,id:e.num,s:specOf(e)}));
    body=`<div class="filters">${fld("f.cat.q","Pesquisar",{live:true,ph:"nº, marca, modelo, matrícula"})}${fld("f.cat.cls","Classe",{type:"select",opts:[["","Todas"]].concat(maqClasses().map(c=>[c,c]))})}${lg?`<a class="btn" href="#planeamento" style="align-self:flex-end">Corrigir pesos e dimensões no planeador</a>`:""}</div>
     ${tbl("cmaq",[{k:"num",l:"Nº",v:e=>`<span class="pn">${esc(e.num)}</span>`},{k:"marca",l:"Marca"},{k:"modelo",l:"Modelo"},{k:"classe",l:"Classe"},{k:"peso",l:"Peso",cls:"r",v:e=>`<span class="num">${tn(e.s.peso)} t</span>`,s:e=>e.s.peso},{k:"dim",l:"C × L × A",cls:"r",nosort:true,v:e=>`<span class="num">${e.s.c} × ${e.s.l} × ${e.s.a} m</span>`},
      {k:"est",l:"Valores",v:e=>e.s.est?'<span class="chip c-idle">Estimados pela classe</span>':'<span class="chip c-ok">Confirmados</span>',s:e=>e.s.est?1:0},{k:"loc",l:"Última localização",nosort:true,v:e=>esc(PS.eqLoc[e.num]?.loc||"—")}],ms,{k:"marca",size:50})}
@@ -2037,7 +2039,7 @@ function vCatalogo(){const f=S.f.cat;const ad=can.admin(),lg=can.log();const tab
   else if(f.tab==="boxes"){const bx=CFG().boxes||[];body=`<div class="panel"><p class="muted" style="margin-top:0">Boxes de carga do Armazém / Pré-fabricados, usadas no pedido “Entregar material do Armazém”. Sem boxes configuradas, o gestor de obra escreve a box.</p>
    <div class="row">${bx.map((u,i)=>`<span class="chip c-idle" data-del="box|${i}">${esc(u)}${ad?` <button class="btn sm ghost" data-act="delBox" data-a="${i}" aria-label="Remover ${esc(u)}">×</button>`:""}</span>`).join("")||'<span class="muted">Sem boxes configuradas.</span>'}</div>
    ${ad?`<div class="row" style="margin-top:10px">${fld("tmpBox","Nova box",{ph:"Ex.: Box 1"})}<button class="btn" data-act="addBox" style="align-self:flex-end">Adicionar</button></div>`:""}</div>`;}
-  else if(f.tab==="materiais"){const q=f.q.trim().toLowerCase();const ms=S.d.materiais.filter(m=>!q||m.nome.toLowerCase().includes(q));
+  else if(f.tab==="materiais"){const q=f.q.trim().toLowerCase();const ms=S.d.materiais.filter(m=>!q||m.nome.toLowerCase().qInc(q));
    body=`<div class="row" style="justify-content:space-between">${fld("f.cat.q","Pesquisar",{live:true})}${ad?`<button class="btn pri" data-act="material" data-a="">+ Novo material</button>`:""}</div>
     ${S.d.materiais.length?tbl("mat",[{k:"nome",l:"Nome",v:m=>`<b>${esc(m.nome)}</b>${m.ativo===false?' <span class="chip c-idle">Inativo</span>':""}`},{k:"tipo",l:"Tipo",v:m=>m.tipo==="maquina"?"Máquina":"Material"},{k:"unidade",l:"Unidade"},
       {k:"eqs",l:"Equipamentos compatíveis",nosort:true,v:m=>esc((m.equipamentos||[]).map(eqName).join(", ")||"—")},{k:"caracteristicas",l:"Características"}],ms,{row:ad?"material":null})
@@ -2460,6 +2462,7 @@ const A={
   assignTo(pid,vid){if(!can.log()||!M.ped[pid])return;A.agendar(pid);if(!S.modal||S.modal.t!=="agendar")return;const f=S.modal.f,v=M.via[vid],P=M.ped[pid];f.origem="propria";f.viaturaId=vid;
     if(v){f.motorista=(v.virtual?v.pm.mot:v.motorista)||f.motorista||"";if(!f.equipamentoId||(P.recurso&&P.recurso.viaturaId!==vid))f.equipamentoId=vEqs(v)[0]||f.equipamentoId||"";}
     if(!f._partMan)f.partida=partidaDefault(vid);const ref=P.previstoInicio||P.periodoInicio||P.pretendidaEm;if(!ref||dayKey(ref)!==S.f.ag.data)f.inicio=S.f.ag.data+"T07:00";if(/T00:00$/.test(f.inicio||""))f.inicio=f.inicio.replace(/T00:00$/,"T07:00");f._autoFim=undefined;render();},
+  todaFrota(){S.todaFrota=!S.todaFrota;try{localStorage.setItem("cpsa_todafrota",S.todaFrota?"1":"0");}catch(e){}render();},
   agSide(){S.agSideOff=!S.agSideOff;try{localStorage.setItem("cpsa_agside",S.agSideOff?"off":"on");}catch(e){}render();},
   planoVista(v){S.planoVista=v;try{localStorage.setItem("cpsa_plano",v);}catch(e){}render();}, notif(){S.notifOpen=!S.notifOpen;render();},
   lidas(){try{localStorage.setItem("notifLidas",nowISO());}catch(e){}render();},
