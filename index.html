@@ -568,7 +568,7 @@ const EST_PRE="Pré-planeamento",EST_APR="Em aprovação",PLAN=[EST_PRE,EST_APR,
 const faseAlt=e=>e===EST_APR?"apr":([...PLAN,"Em execução"].includes(e)?"plano":null);
 const ALT_LAB={apr:"Alteração em Aprovação",plano:"Alteração ao Planeamento Aprovado"};
 function altPatch(P,fase,patch){if(fase==="apr")patch.altAprov=(P.altAprov||0)+1;else if(fase==="plano")patch.altPlano=(P.altPlano||0)+1;return patch;}
-const EST_CLS={"Rascunho":"c-idle","Pendente de aprovação":"c-warn","Devolvido para correção":"c-warn","Rejeitado":"c-bad","Aprovado":"c-info","Por agendar":"c-info","Pré-planeamento":"c-idle","Em aprovação":"c-warn","Agendado":"c-info","Em execução":"c-ok","Concluído":"c-ok","Cancelado":"c-idle"};
+const EST_CLS={"Rascunho":"c-idle","Pendente de aprovação":"c-warn","Devolvido para correção":"c-warn","Rejeitado":"c-bad","Aprovado":"c-info","Por agendar":"c-bad","Pré-planeamento":"c-idle","Em aprovação":"c-warn","Agendado":"c-ok","Em execução":"c-ok","Concluído":"c-ok","Cancelado":"c-idle"};
 const PRIOS=[["baixa","Baixa"],["normal","Normal"],["alta","Alta"],["urgente","Urgente"]];
 const PRIO_CLS={baixa:"c-idle",normal:"c-idle",alta:"c-warn",urgente:"c-bad"};
 const PRIO_ORD={urgente:0,alta:1,normal:2,baixa:3};
