@@ -3207,9 +3207,15 @@ function marcarFalta(){const root=S.modal?document.getElementById("modal"):docum
   const miss=[];root.querySelectorAll("label.fld").forEach(lb=>{if(!lb.querySelector(":scope>span>em"))return;const c=lb.querySelector("select,textarea,input:not(.cbx-in)");if(!c||c.disabled||c.type==="checkbox")return;
     if(String(c.value||"").trim()===""){lb.classList.add("miss");miss.push(lb);}});
   if(!S.missJump)return;S.missJump=false;
-  const alvo=miss[0]||err;alvo.scrollIntoView({behavior:"smooth",block:"center"});
+  const alvo=miss[0]||err;window._saltou=true;alvo.scrollIntoView({behavior:"smooth",block:"center"});
   if(miss[0]){const c=miss[0].querySelector(".cbx-in")||miss[0].querySelector("select,textarea,input");try{c.focus({preventScroll:true});}catch(e){}}}
-function doRender(){buildMaps();const ae=document.activeElement;if(ae&&ae.classList&&ae.classList.contains("cbx-in")&&ae.id){_cbxKeep={id:ae.id,v:ae.value,q:ae.value,open:!!(_cbx&&_cbx.inp===ae)};}cbxClose();const id=ae&&ae.id;let s0=null,s1=null;try{s0=ae.selectionStart;s1=ae.selectionEnd;}catch(e){}
+/* Manter a posição: guarda o scroll da janela e das áreas com scroll (painel Por agendar, plano, tabelas) e repõe-no depois de redesenhar */
+let _scrEls=new Set();document.addEventListener("scroll",e=>{const t=e.target;if(t&&t.nodeType===1&&t.closest&&t.closest("#app"))_scrEls.add(t);},{capture:true,passive:true});
+function scrKey(el){const cls=typeof el.className==="string"?el.className.trim().split(/\s+/).filter(c=>c&&!["open","on","sel","drop-over","dragging"].includes(c)):[];
+  const sel=el.id?"#"+CSS.escape(el.id):el.tagName.toLowerCase()+cls.map(c=>"."+CSS.escape(c)).join("");return {sel,i:[...document.querySelectorAll("#app "+sel)].indexOf(el)};}
+function doRender(){const _sx=window.scrollX,_sy=window.scrollY;const _snaps=[..._scrEls].filter(e=>e.isConnected&&(e.scrollTop||e.scrollLeft)).map(e=>({...scrKey(e),t:e.scrollTop,l:e.scrollLeft}));_scrEls=new Set();
+  try{doRender0();}finally{_snaps.forEach(x=>{if(x.i<0)return;const el=document.querySelectorAll("#app "+x.sel)[x.i];if(el){el.scrollTop=x.t;el.scrollLeft=x.l;_scrEls.add(el);}});if(window._saltou)window._saltou=false;else if(window.scrollX!==_sx||window.scrollY!==_sy)window.scrollTo(_sx,_sy);}}
+function doRender0(){buildMaps();const ae=document.activeElement;if(ae&&ae.classList&&ae.classList.contains("cbx-in")&&ae.id){_cbxKeep={id:ae.id,v:ae.value,q:ae.value,open:!!(_cbx&&_cbx.inp===ae)};}cbxClose();const id=ae&&ae.id;let s0=null,s1=null;try{s0=ae.selectionStart;s1=ae.selectionEnd;}catch(e){}
   const mb=document.querySelector(".mbody");const mst=mb?mb.scrollTop:0;
   $("#app").innerHTML=page();$("#modal").innerHTML=S.boot==="ready"&&S.modal?modalHtml():"";posModal();enhanceSelects();try{mapaSync();}catch(e){console.warn(e);}
   const mb2=document.querySelector(".mbody");if(mb2)mb2.scrollTop=mst;
