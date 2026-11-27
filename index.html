@@ -800,12 +800,16 @@ async function migrarEstrado(){if(_migEst||!db||realRole()!=="admin"||!["equipam
     for(const g of S.d.gestores.filter(g=>(g.equipamentos||[]).includes("carro-grua")&&!(g.equipamentos||[]).includes("estrado")))await db.doc("gestores/"+g.id).update({equipamentos:[...g.equipamentos,"estrado"]});
     const sv=svcCfg();if(sv["carro-grua"]&&!sv.estrado){const d=(S.d.cfg||[]).find(c=>c.id==="servicos");await db.doc("cfg/servicos").set({...(d||{}),map:{...sv,estrado:sv["carro-grua"]}});}
     toast("Tipos de viatura atualizados: “Estrado” passou a ser uma viatura dos Transportes especiais.");}catch(e){console.warn(e);_migEst=false;}}
+let _bascRec=false;
+async function seedBascRecolha(){if(_bascRec||!db||realRole()!=="admin"||!S.loaded.equipamentos)return;_bascRec=true;
+  try{for(const e of S.d.equipamentos.filter(e=>/basculante/.test(normNome(e.nome))&&!/cisterna/.test(normNome(e.nome)+" "+(e.categoriaId||""))&&e.ativo!==false&&!e.recolha&&!e.recolhaDef))
+    await db.doc("equipamentos/"+e.id).update({recolha:true,recolhaDef:true});}catch(err){console.warn(err);_bascRec=false;}}
 let _veraBruna=false;
 async function seedVeraBruna(){if(_veraBruna||!db||realRole()!=="admin"||!["utilizadores","gestores"].every(c=>S.loaded[c]))return;_veraBruna=true;
   const ach=t=>S.d.gestores.find(g=>normNome(g.nome).includes(t)),V=ach("vera bairros"),B=ach("bruna cordeiro");
   try{if(V&&B&&V.partilha===undefined&&B.partilha===undefined){await db.doc("gestores/"+V.id).update({partilha:[B.id]});await db.doc("gestores/"+B.id).update({partilha:[V.id]});}
     for(const g of [V,B].filter(Boolean)){const uid=pessoaLog(g)?.t==="user"?pessoaLog(g).id:null;const u=uid&&M.user[uid];if(u&&u.elimPed===undefined)await db.doc("utilizadores/"+uid).update({elimPed:true});}}catch(e){console.warn(e);_veraBruna=false;}}
-async function syncGestores(){setTimeout(seedVeraBruna,800);if(!db||realRole()!=="admin"||!["utilizadores","convites","gestores"].every(c=>S.loaded[c]))return;
+async function syncGestores(){setTimeout(seedVeraBruna,800);setTimeout(seedBascRecolha,900);if(!db||realRole()!=="admin"||!["utilizadores","convites","gestores"].every(c=>S.loaded[c]))return;
   const pess=[...S.d.utilizadores.filter(u=>u.ativo!==false&&u.perfil==="logistica").map(u=>({k:"u:"+u.id,uid:u.id,nome:nome(u.id)!=="Utilizador"?nome(u.id):(u.alcunha||""),email:u.email||""})),
     ...S.d.convites.filter(c=>c.ativo!==false&&!c.usadoPor&&c.perfil==="logistica").map(c=>({k:"c:"+c.id,cid:c.id,nome:c.nome,email:c.email||""}))];
   for(const p of pess){if(_gsDone.has(p.k))continue;_gsDone.add(p.k);
@@ -1324,7 +1328,7 @@ function secTipo(F){const t=F.tipo;let body="";
     body=`${selViatura(false)}${fs.length?fld("form.fornecedorId","Fornecedor",{type:"select",req:true,opts:[["","Selecione"]].concat(fs.map(f=>[f.id,f.nome])).concat([["__outro","Outro fornecedor (escrever o nome)"]])}):""}
      ${!fs.length||F.fornecedorId==="__outro"?fld("form.fornecedorNome","Nome do fornecedor",{req:true}):""}${secCarga()}${mLinhasHtml(F)}${fld("form.urgente","Urgente (pico)",{type:"check",cls:"full"})}`;}
   else if(t==="recolha"){let opts=eqs("",false).filter(e=>e.recolha);if(!opts.length)opts=eqs("",false).filter(e=>["porta-maquinas","carro-grua"].includes(e.id));
-    body=`${fld("form.equipamentoId","Tipo de equipamento para recolha",{type:"select",req:true,opts:[["","Selecione"]].concat(opts.map(e=>[e.id,e.nome]))})}${fld("form.nCargas","Nº de cargas",{type:"number",min:1,req:true})}
+    body=`${fld("form.equipamentoId","Tipo de equipamento para recolha",{type:"select",req:true,opts:[["","Selecione"]].concat(opts.map(e=>[e.id,e.nome]))})}${(()=>{const vs=(M.eq[F.equipamentoId]?.variantes)||[];return vs.length?fld("form.variante","Variante",{type:"select",req:true,opts:[["","Selecione"]].concat(vs.map(v=>[v,v]))}):"";})()}${fld("form.nCargas","Nº de cargas",{type:"number",min:1,req:true})}
      ${fld("form.cDesc","Material a recolher",{cls:"full",ph:"Opcional. Ex.: cofragens, contentor de entulho"})}${fld("form.cPeso","Peso aproximado por carga (t)",{type:"number",step:"any",min:0})}`;}
   else if(t==="cisterna"){const cl=F.clienteId&&F.clienteId!=="__outro"?M.cli[F.clienteId]:null;const todos=matsCisterna();const ms=cl&&(cl.materiais||[]).length?todos.filter(m=>cl.materiais.includes(m.id)):todos;
     if(F.cMat&&F.cMat!=="__outro"&&!ms.some(m=>m.id===F.cMat))F.cMat="";if(!F.cMat&&cl&&(cl.materiais||[]).length===1&&ms.length===1)F.cMat=ms[0].id;
@@ -1374,7 +1378,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
     if(t==="armazem")need(String(F.box||"").trim(),"box de carga");
     if(t==="fornecedor")need(fornNome,"fornecedor");
     if(t==="armazem"||t==="fornecedor"){need(carga.descricao,"descrição da carga");}
-    if(t==="recolha"){need(F.equipamentoId,"tipo de equipamento para recolha");need(numOr(F.nCargas)>=1,"nº de cargas");}
+    if(t==="recolha"){need(F.equipamentoId,"tipo de equipamento para recolha");if((M.eq[F.equipamentoId]?.variantes||[]).length)need(F.variante,"variante");need(numOr(F.nCargas)>=1,"nº de cargas");}
     if(t==="maquina")need(F.maquinas.length,"máquinas a transportar");
     if(t==="cisterna"){if(F.clienteId&&F.clienteId!=="__outro")F.cliente=M.cli[F.clienteId]?.nome||F.cliente;need(String(F.cliente||"").trim(),"cliente");need(F.cMat&&(F.cMat!=="__outro"||String(F.cMatOutro||"").trim()),"material");need(numOr(F.nCargas)>=1,"nº de cargas");}
     const porMaq=t==="maquina"&&F.maqModo==="por"&&!F.id;
@@ -1397,7 +1401,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
   if(t==="maquina"){maquinas=G.maquinas.filter(n=>maqBy(n)).map(n=>{const e=maqBy(n),s=specOf(e);return{num:n,label:maqLabel(e),classe:e.classe,peso:s.peso,c:s.c,l:s.l,a:s.a,est:!!s.est};});
     const A=analiseMaq(formAn(G));if(A&&!A.sem){const b=A.rank.find(r=>r.fits&&!r.excluded);analise={nivel:A.cl.level,pesoKg:A.L.peso,viagens:A.vg?A.vg.n:null,conjunto:b?b.pm.id:null,pilotos:A.pil.n,km:A.km,duracaoMin:A.pv?A.pv.fim:null,entregaPrevista:A.pv?A.pv.entrega:null,calculadoEm:nowISO()};}}
   return {tipo:t,obraId:t==="cisterna"?null:G.obraId,logisticaId:G.logisticaId||gestorAutoId({tipo:t,equipamentoId:eqId,categoriaId:t==="cisterna"?"cisternas":G.categoriaId})||null,prioridade:(t==="armazem"||t==="fornecedor")?(G.urgente?"urgente":"normal"):(G.prioridade||"normal"),
-    categoriaId:t==="cisterna"?"cisternas":eqId?(M.eq[eqId]?.categoriaId||G.categoriaId||null):(G.categoriaId||null),equipamentoId:eqId,variante:t==="maquina"||t==="recolha"?"":(G.variante||""),
+    categoriaId:t==="cisterna"?"cisternas":eqId?(M.eq[eqId]?.categoriaId||G.categoriaId||null):(G.categoriaId||null),equipamentoId:eqId,variante:t==="maquina"?"":t==="recolha"?((M.eq[eqId]?.variantes||[]).includes(G.variante)?G.variante:""):(G.variante||""),
     periodoInicio:t==="viatura"?pi:null,periodoFim:t==="viatura"?pf:null,box:t==="armazem"?String(G.box||"").trim():"",
     fornecedorId:t==="fornecedor"&&forn?forn.id:null,fornecedorNome:t==="fornecedor"?fornNome:"",
     carga:["armazem","fornecedor","recolha","cisterna"].includes(t)?(t==="cisterna"?{...carga,descricao:carga.descricao||M.mat[carga.materialId]?.nome||""}:carga):null,nCargas:t==="recolha"||t==="cisterna"?numOr(G.nCargas):null,cliente:t==="cisterna"?String(G.cliente||"").trim():"",clienteId:t==="cisterna"&&G.clienteId&&G.clienteId!=="__outro"?G.clienteId:null,horaCarga:t==="cisterna"?String(G.cHoraCarga||"").trim():"",janelaDescarga:t==="cisterna"?String(G.cJanela||"").trim():"",
