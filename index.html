@@ -505,7 +505,7 @@ td.selc input,th.selc input{width:16px;height:16px;cursor:pointer}
 
 <script src="config.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="supa.js?v=20261127"></script>
+<script src="supa.js?v=20261127b"></script>
 <script src="programacao.js"></script>
 <script>
 "use strict";
@@ -841,6 +841,7 @@ function wantProf(ids){ids.forEach(i=>{if(i&&!S.prof[i])profPending.add(i);});if
 
 /* ========== escrita ========== */
 function errMsg(e){const c=e&&e.code;
+  if(c==="permission_denied")return"Sem permissão no servidor para esta operação. Peça ao administrador.";
   if(c==="invalid_argument")return"A alteração foi recusada: o seu nível de acesso não permite esta operação. Peça ao administrador.";
   if(c==="quota_exceeded")return"O armazenamento da plataforma está cheio. Contacte o administrador.";
   if(c==="resource_exhausted")return"Demasiadas operações seguidas. Aguarde uns segundos e tente de novo.";
@@ -2500,7 +2501,7 @@ const A={
   selClr(){S.selPed=new Set();render();},
   delPeds(){if(!podeElimPed()||!S.selPed||!S.selPed.size)return;S.modal={t:"delPeds",f:{}};render();},
   async doDelPeds(){if(!podeElimPed())return;const ids=[...S.selPed].filter(id=>M.ped[id]);const btn=document.querySelector("[data-act=doDelPeds]");if(btn)btn.disabled=true;let n=0;
-    try{for(const id of ids){const p=M.ped[id];const dados=Object.fromEntries(Object.entries(p).filter(([k])=>k!=="id"));await db.collection("eliminados").doc().set({col:"pedidos",docId:id,nome:`Pedido ${numT(p)}`,dados,por:S.me.id,em:nowISO()});await db.doc("pedidos/"+id).delete();n++;}
+    try{for(const id of ids){const p=M.ped[id];const dados=Object.fromEntries(Object.entries(p).filter(([k])=>k!=="id"));const eref=db.collection("eliminados").doc();await (eref.insert||eref.set).call(eref,{col:"pedidos",docId:id,nome:`Pedido ${numT(p)}`,dados,por:S.me.id,em:nowISO()});await db.doc("pedidos/"+id).delete();n++;}
       toast(`${n} pedido(s) eliminado(s). ${realRole()==="admin"?"Pode restaurá-los":"O administrador pode restaurá-los"} em Configurações › Registo de eliminações.`);}catch(e){toast(errMsg(e)+` (${n} eliminados antes do erro)`,"bad");}
     S.selPed=new Set();S.modal=null;render();},
   sedeAdd(){S.sedF=S.sedF||sedesCfg().map(x=>({...x}));S.sedF.push({nome:"",obra:""});render();},

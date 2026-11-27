@@ -31,6 +31,12 @@
         const {error} = await sb.from("docs").upsert({col, id, data: clean, updated_at: new Date().toISOString()}, {onConflict:"col,id"});
         if(error) throw mapErr(error);
       },
+      /* inserção simples (sem upsert): não precisa de poder ler/alterar o registo — usado no Registo de eliminações */
+      async insert(obj){
+        const clean = JSON.parse(JSON.stringify(obj||{}));
+        const {error} = await sb.from("docs").insert({col, id, data: clean, updated_at: new Date().toISOString()});
+        if(error) throw mapErr(error);
+      },
       async update(patch){
         const clean = JSON.parse(JSON.stringify(patch||{}));
         const {error} = await sb.rpc("doc_merge", {p_col:col, p_id:id, p_patch:clean});
