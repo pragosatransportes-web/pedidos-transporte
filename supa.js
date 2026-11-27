@@ -45,6 +45,10 @@
         const {data, error} = await sb.rpc("lock_try", {p_col:col, p_id:id, p_holder:holder, p_ms:(o && o.ttlMs) || 5000});
         if(error) throw mapErr(error);
         return {acquired: !!data};
+      },
+      async release(holder){
+        const {error} = await sb.from("locks").delete().eq("col",col).eq("id",id).eq("holder",holder);
+        if(error) throw mapErr(error);
       }
     };
   }
