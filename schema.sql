@@ -44,6 +44,12 @@ language sql stable security definer set search_path=public as $$
   select exists(select 1 from app_admins a where lower(a.email)=lower(auth.jwt()->>'email'))
       or exists(select 1 from docs d where d.col='utilizadores' and d.id=auth.uid()::text and d.data->>'perfil'='admin' and coalesce((d.data->>'ativo')::boolean,true)) $$;
 
+-- utilizador autorizado a eliminar pedidos (utilizadores/{id}.elimPed = true, marcado pelo administrador)
+create or replace function public.eu_elim_ped() returns boolean
+language sql stable security definer set search_path=public as $$
+  select public.eu_admin() or exists(select 1 from docs d where d.col='utilizadores' and d.id=auth.uid()::text
+    and coalesce((d.data->>'elimPed')::boolean,false) and coalesce((d.data->>'ativo')::boolean,true)) $$;
+
 -- coleções que só o administrador altera
 create or replace function public.col_admin(c text) returns boolean language sql immutable as $$
   select c = any(array['utilizadores','categorias','equipamentos','materiais','zonas','cfg','gestores','convites','eliminados']) $$;
@@ -58,12 +64,12 @@ drop policy if exists docs_apagar on public.docs;
 create policy docs_ler on public.docs for select to authenticated using (
   public.eu_permitido() and (col not in ('eliminados','acessos') or public.eu_admin() or (col='acessos' and id=auth.uid()::text)));
 create policy docs_inserir on public.docs for insert to authenticated with check (
-  public.eu_permitido() and (not public.col_admin(col) or public.eu_admin()) and (col<>'acessos' or id=auth.uid()::text or public.eu_admin()));
+  public.eu_permitido() and (not public.col_admin(col) or public.eu_admin() or (col='eliminados' and data->>'col'='pedidos' and public.eu_elim_ped())) and (col<>'acessos' or id=auth.uid()::text or public.eu_admin()));
 create policy docs_alterar on public.docs for update to authenticated using (
   public.eu_permitido() and (not public.col_admin(col) or public.eu_admin()) and (col<>'acessos' or id=auth.uid()::text or public.eu_admin()))
   with check (public.eu_permitido() and (not public.col_admin(col) or public.eu_admin()));
 create policy docs_apagar on public.docs for delete to authenticated using (
-  public.eu_permitido() and (not public.col_admin(col) or public.eu_admin()));
+  public.eu_permitido() and (not public.col_admin(col) or public.eu_admin()) and (col<>'pedidos' or public.eu_elim_ped()));
 drop policy if exists locks_tudo on public.locks;
 create policy locks_tudo on public.locks for all to authenticated using (public.eu_permitido()) with check (public.eu_permitido());
 
@@ -154,4 +160,4 @@ do $$ begin
   end if;
 end $$;
 grant select,insert,update,delete on public.docs, public.locks to authenticated;
-grant execute on function public.doc_merge(text,text,jsonb), public.lock_try(text,text,text,int), public.eu_permitido(), public.eu_admin() to authenticated;
+grant execute on function public.doc_merge(text,text,jsonb), public.lock_try(text,text,text,int), public.eu_permitido(), public.eu_admin(), public.eu_elim_ped() to authenticated;

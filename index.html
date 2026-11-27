@@ -800,7 +800,12 @@ async function migrarEstrado(){if(_migEst||!db||realRole()!=="admin"||!["equipam
     for(const g of S.d.gestores.filter(g=>(g.equipamentos||[]).includes("carro-grua")&&!(g.equipamentos||[]).includes("estrado")))await db.doc("gestores/"+g.id).update({equipamentos:[...g.equipamentos,"estrado"]});
     const sv=svcCfg();if(sv["carro-grua"]&&!sv.estrado){const d=(S.d.cfg||[]).find(c=>c.id==="servicos");await db.doc("cfg/servicos").set({...(d||{}),map:{...sv,estrado:sv["carro-grua"]}});}
     toast("Tipos de viatura atualizados: “Estrado” passou a ser uma viatura dos Transportes especiais.");}catch(e){console.warn(e);_migEst=false;}}
-async function syncGestores(){if(!db||realRole()!=="admin"||!["utilizadores","convites","gestores"].every(c=>S.loaded[c]))return;
+let _veraBruna=false;
+async function seedVeraBruna(){if(_veraBruna||!db||realRole()!=="admin"||!["utilizadores","gestores"].every(c=>S.loaded[c]))return;_veraBruna=true;
+  const ach=t=>S.d.gestores.find(g=>normNome(g.nome).includes(t)),V=ach("vera bairros"),B=ach("bruna cordeiro");
+  try{if(V&&B&&V.partilha===undefined&&B.partilha===undefined){await db.doc("gestores/"+V.id).update({partilha:[B.id]});await db.doc("gestores/"+B.id).update({partilha:[V.id]});}
+    for(const g of [V,B].filter(Boolean)){const uid=pessoaLog(g)?.t==="user"?pessoaLog(g).id:null;const u=uid&&M.user[uid];if(u&&u.elimPed===undefined)await db.doc("utilizadores/"+uid).update({elimPed:true});}}catch(e){console.warn(e);_veraBruna=false;}}
+async function syncGestores(){setTimeout(seedVeraBruna,800);if(!db||realRole()!=="admin"||!["utilizadores","convites","gestores"].every(c=>S.loaded[c]))return;
   const pess=[...S.d.utilizadores.filter(u=>u.ativo!==false&&u.perfil==="logistica").map(u=>({k:"u:"+u.id,uid:u.id,nome:nome(u.id)!=="Utilizador"?nome(u.id):(u.alcunha||""),email:u.email||""})),
     ...S.d.convites.filter(c=>c.ativo!==false&&!c.usadoPor&&c.perfil==="logistica").map(c=>({k:"c:"+c.id,cid:c.id,nome:c.nome,email:c.email||""}))];
   for(const p of pess){if(_gsDone.has(p.k))continue;_gsDone.add(p.k);
@@ -810,12 +815,21 @@ async function syncGestores(){if(!db||realRole()!=="admin"||!["utilizadores","co
     try{if(g){const up={};if(p.uid&&g.utilizadorId!==p.uid)up.utilizadorId=p.uid;if(p.cid&&g.conviteId!==p.cid)up.conviteId=p.cid;if(!g.email&&p.email)up.email=p.email;if(p.nome&&g.nome!==p.nome)up.nome=p.nome;if(Object.keys(up).length)await db.doc("gestores/"+g.id).update(up);}
       else await db.collection("gestores").doc().set({nome:p.nome||"Gestor",funcao:"Gestor de logística",empresas:[],equipamentos:[],zonas:[],zonaId:null,contacto:"",email:p.email,utilizadorId:p.uid||null,conviteId:p.cid||null,ativo:true,criadoEm:nowISO(),criadoPor:S.me.id,criadoAuto:true});}catch(e){console.warn(e);}}}
 function gestoresDoPedido(p){return S.d.gestores.filter(g=>gAtivo(g)&&(gEq(g).length||gZo(g).length||gEmp(g).length)&&gestorCobrePedido(g,p));}
-function filtroGestor(p,id,comCriador){const g=M.gest&&M.gest[id];if(g)return gestorCobrePedido(g,p)||logIds(p).includes("g:"+id)||(!!g.utilizadorId&&logIds(p).includes(g.utilizadorId));return logIds(p).includes(id)||M.obra[p.obraId]?.gestorId===id||(comCriador&&p.criadoPor===id);}
+/* Gestores que partilham pedidos (ex.: Vera e Bruna): o que é de uma é das duas. Ligação simétrica em gestores/{id}.partilha */
+function gPares(g){if(!g)return[];const all=S.d.gestores||[];const ids=new Set([g.id]);let ch=true;
+  while(ch){ch=false;all.forEach(x=>{const ps=x.partilha||[];if(ids.has(x.id)){ps.forEach(i=>{if(!ids.has(i)&&M.gest[i]){ids.add(i);ch=true;}});}else if(ps.some(i=>ids.has(i))){ids.add(x.id);ch=true;}});}
+  return [...ids].map(i=>M.gest[i]).filter(Boolean);}
+const gRef=g=>g.utilizadorId||"g:"+g.id;
+function gDeRef(id){return (S.d.gestores||[]).find(g=>g.id===id||"g:"+g.id===id||(g.utilizadorId&&g.utilizadorId===id))||null;}
+/* acrescenta aos responsáveis os gestores que partilham pedidos com eles */
+function expandLog(ids){const out=[...(ids||[])];(ids||[]).forEach(id=>{const g=gDeRef(id);if(!g)return;gPares(g).filter(x=>x.ativo!==false).forEach(x=>{const r=gRef(x);if(!out.includes(r)&&!out.includes("g:"+x.id)&&!(x.utilizadorId&&out.includes(x.utilizadorId)))out.push(r);});});return out;}
+function filtroGestor(p,id,comCriador){const g=M.gest&&M.gest[id];if(g)return gPares(g).some(x=>filtroGestor1(p,x.id,comCriador));const g2=gDeRef(id);if(g2)return gPares(g2).some(x=>filtroGestor1(p,x.id,comCriador))||filtroGestor1(p,id,comCriador);return filtroGestor1(p,id,comCriador);}
+function filtroGestor1(p,id,comCriador){const g=M.gest&&M.gest[id];if(g)return gestorCobrePedido(g,p)||logIds(p).includes("g:"+id)||(!!g.utilizadorId&&logIds(p).includes(g.utilizadorId));return logIds(p).includes(id)||M.obra[p.obraId]?.gestorId===id||(comCriador&&p.criadoPor===id);}
 function obraVisivel(o){if(role()!=="obra")return true;return gestorUser(o)===S.me.id||o.criadoPor===S.me.id;}
 /* Gestor de logística com cobertura configurada (Configurações › Gestores responsáveis): só vê os pedidos e as viaturas da sua cobertura */
 function meuGestor(){if(role()!=="logistica"||!S.me.id||!S.d.gestores)return null;return S.d.gestores.find(g=>gAtivo(g)&&!gSemCob(g)&&pessoaLog(g)?.id===S.me.id)||null;}
 function pedidoVisivel(p){if(role()==="logistica"){const G=S.todaFrota?null:meuGestor();if(!G)return true;const via=p.recurso&&p.recurso.viaturaId;
-    return gestorCobrePedido(G,p)||logIds(p).includes(S.me.id)||logIds(p).includes("g:"+G.id)||p.criadoPor===S.me.id||(!p.equipamentoId&&!catOf(p)&&!via);}
+    return gPares(G).some(g=>gestorCobrePedido(g,p)||logIds(p).includes("g:"+g.id)||(!!g.utilizadorId&&logIds(p).includes(g.utilizadorId)))||logIds(p).includes(S.me.id)||p.criadoPor===S.me.id||(!p.equipamentoId&&!catOf(p)&&!via);}
   if(role()!=="obra")return true;const o=M.obra[p.obraId];return p.criadoPor===S.me.id||(o&&obraVisivel(o));}
 function podeEditar(p){if(FINAIS.includes(p.estado))return false;if(["Rascunho","Devolvido para correção"].includes(p.estado))return p.criadoPor===S.me.id||can.log();if(can.log())return true;return p.criadoPor===S.me.id&&["Pendente de aprovação","Aprovado","Por agendar"].includes(p.estado);}
 const editaSemSubmeter=p=>!!p&&!["Rascunho","Devolvido para correção"].includes(p.estado);
@@ -991,7 +1005,7 @@ function gestorDe(uid){return uid&&S.d.gestores?S.d.gestores.find(g=>gAtivo(g)&&
 function respAutoId(p,uid){return gestorDe(uid)?uid:gestorAutoId(p);}
 function autoLogForm(F){const cri=F.id?M.ped[F.id]?.criadoPor:S.me.id;const a=respAutoId({tipo:F.tipo,equipamentoId:F.tipo==="maquina"?"porta-maquinas":F.equipamentoId,categoriaId:F.tipo==="cisterna"?"cisternas":F.categoriaId},cri);
   if(!Array.isArray(F.logisticaIds))F.logisticaIds=F.logisticaId?[F.logisticaId]:[];
-  if(!F._logMan)F.logisticaIds=a?[a]:[];F._autoLog=a;F.logisticaId=F.logisticaIds[0]||"";}
+  if(!F._logMan)F.logisticaIds=a?expandLog([a]):[];F._autoLog=a;F.logisticaId=F.logisticaIds[0]||"";}
 const logIds=p=>(p&&Array.isArray(p.logisticaIds)&&p.logisticaIds.length)?p.logisticaIds:(p&&p.logisticaId?[p.logisticaId]:[]);
 function logNomes(p){const a=logIds(p);return a.length?a.map(nome).join(", "):"A definir";}
 function optLogistica(atual){const gs=S.d.gestores.filter(gAtivo).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt"));
@@ -1160,7 +1174,7 @@ function pedCols(){return [{k:"numero",l:"Nº",v:p=>pn(p)},{k:"tipo",l:"Tipo",v:
   {k:"mat",l:"Pedido",v:p=>resumoHtml(p),s:p=>matDesc(p)},{k:"eq",l:"Equipamento",v:p=>esc(eqTxt(p)),s:p=>eqTxt(p)},
   {k:"pretendidaEm",l:"Pretendido",v:p=>`<span class="num">${fmtPed(p.pretendidaEm,p.pretendidaSemHora)}</span>`},{k:"previstoInicio",l:"Previsto",v:p=>`<span class="num">${fmtDT(p.previstoInicio)}</span>`},
   {k:"origem",l:"Origem",v:p=>chipO(p),s:p=>origem(p)},{k:"estado",l:"Estado",v:p=>chipE(p.estado)+chipX(p),s:p=>ESTADOS.indexOf(p.estado)},{k:"prioridade",l:"Prioridade",v:p=>chipP(p.prioridade),s:p=>PRIO_ORD[p.prioridade]}];}
-function pedTable(id,ps){const sel=id==="ped"&&podeEliminar();S.selPed=S.selPed||new Set();const vis=new Set(ps.map(p=>p.id));[...S.selPed].forEach(x=>{if(!M.ped[x])S.selPed.delete(x);});
+function pedTable(id,ps){const sel=id==="ped"&&podeElimPed();S.selPed=S.selPed||new Set();const vis=new Set(ps.map(p=>p.id));[...S.selPed].forEach(x=>{if(!M.ped[x])S.selPed.delete(x);});
   const n=S.selPed.size,todos=ps.length&&ps.every(p=>S.selPed.has(p.id));
   const cols=sel?[{k:"_sel",l:"",nosort:true,cls:"selc",hd:`<input type="checkbox" data-act="selAll" ${todos?"checked":""} aria-label="Selecionar todos">`,v:p=>`<input type="checkbox" data-act="selPed" data-a="${p.id}" ${S.selPed.has(p.id)?"checked":""} aria-label="Selecionar ${esc(numT(p))}">`}].concat(pedCols()):pedCols();
   return (sel&&n?`<div class="selbar"><b>${n} pedido(s) selecionado(s)</b>${[...S.selPed].some(x=>!vis.has(x))?` <small class="muted">(alguns fora dos filtros atuais)</small>`:""}<span style="flex:1"></span><button class="btn sm ghost" data-act="selClr">Limpar seleção</button><button class="btn sm bad" data-act="delPeds">Eliminar selecionados</button></div>`:"")+tbl(id,cols,ps,{row:"ped",k:"numero",d:"desc",empty:"Nenhum pedido corresponde aos filtros.",group:id==="ped"&&S.pedAgr!==false?{key:pedGrpKey,head:pedGrpHead}:null});}
@@ -1390,7 +1404,7 @@ async function guardarPed(submeter,opt={}){const F=S.form;F.err="";const t=F.tip
   else if(!F.id&&t==="maquina"&&F.maqModo==="por"&&F.maquinas.length>1)F.maquinas.forEach(n=>{const l=F.maqLoc[n]||{};Gs.push({...F,maquinas:[n],obraId:((obraDeTexto(l.d)||obraDeTexto(l.o))||{}).id||F.obraId||"",localCarga:String(l.o||"").trim(),localDescarga:String(l.d||"").trim(),coordCarga:String(l.oc||""),coordDescarga:String(l.dc||""),kmManual:""});});
   else if(!F.id&&t==="maquina"&&F.maqModo==="por"){const n=F.maquinas[0],l=F.maqLoc[n]||{};Gs.push({...F,localCarga:String(l.o||F.localCarga||"").trim(),localDescarga:String(l.d||F.localDescarga||"").trim(),coordCarga:String(l.oc||F.coordCarga||""),coordDescarga:String(l.dc||F.coordDescarga||"")});}
   else{Gs.push(F);if(!F.id&&COMB_T.includes(t))(F.cExtra||[]).forEach(L=>{const o=M.obra[L.obraDesc];Gs.push({...F,_cx:L,obraDesc:L.obraDesc,obraId:o?o.id:F.obraId,localDescarga:o?`${o.codigo} · ${o.nome}`:String(L.localDescarga||"").trim(),coordDescarga:o?obraCoordTxt(o):String(L.coordDescarga||"").trim(),mExtra:[],...(t==="armazem"?pontoCarga(L):{})});});}
-  const datas=Gs.map(G=>{const d=mk(G);d.logisticaIds=(G.logisticaIds&&G.logisticaIds.length)?[...G.logisticaIds]:(d.logisticaId?[d.logisticaId]:[]);d.logisticaId=d.logisticaIds[0]||null;if(t==="armazem"||t==="fornecedor")d.linhas=linhasMat(G);if(G._cx){const L=G._cx;d.carga={descricao:String(L.cDesc||"").trim(),materialId:L.cMat||null,c:numOr(L.cC),l:numOr(L.cL),a:numOr(L.cA),peso:numOr(L.cPeso),volumes:numOr(L.cVol)};d.linhas=[{descricao:d.carga.descricao,materialId:d.carga.materialId,peso:d.carga.peso,volumes:d.carga.volumes,c:d.carga.c,l:d.carga.l,a:d.carga.a}];}return d;});
+  const datas=Gs.map(G=>{const d=mk(G);d.logisticaIds=expandLog((G.logisticaIds&&G.logisticaIds.length)?[...G.logisticaIds]:(d.logisticaId?[d.logisticaId]:[]));d.logisticaId=d.logisticaIds[0]||null;if(t==="armazem"||t==="fornecedor")d.linhas=linhasMat(G);if(G._cx){const L=G._cx;d.carga={descricao:String(L.cDesc||"").trim(),materialId:L.cMat||null,c:numOr(L.cC),l:numOr(L.cL),a:numOr(L.cA),peso:numOr(L.cPeso),volumes:numOr(L.cVol)};d.linhas=[{descricao:d.carga.descricao,materialId:d.carga.materialId,peso:d.carga.peso,volumes:d.carga.volumes,c:d.carga.c,l:d.carga.l,a:d.carga.a}];}return d;});
   if(Gs.some(G=>G._cx))datas.forEach((d,i)=>{d.combIdx=i+1;d.combTot=datas.length;});
   const data=datas[0];
   const btns=document.querySelectorAll("[data-act=guardarPed]");btns.forEach(b=>b.disabled=true);
@@ -1550,9 +1564,12 @@ function pedEixos(p){const m=String(p&&p.variante||"").match(/(\d)\s*eixo/i);ret
 function eixosAlerta(p,v){return pedEixos(p)===3&&vEixos(v)===4?`Pedido de 3 eixos atribuído a ${v.matricula||v.ident}, que é de 4 eixos.`:"";}
 function vTag(v){return vTag0(v)+(vEixos(v)?` · ${vEixos(v)} eixos`:"");}
 function vTag0(v){const e=vEqs(v).map(eqName).filter(x=>x!=="—");return e.length?e.join(" / "):(v.tipoTxt||(v.unidade==="rigido"?"Rígido":"Sem tipo definido"));}
-const unidadesPlano=()=>{const G=S.todaFrota?null:meuGestor();return viaturasAll().filter(v=>v.ativo!==false&&v.unidade!=="reboque"&&(!G||gestorCobreViatura(G,v)));};
+const unidadesPlano=()=>{const G=S.todaFrota?null:meuGestor();return viaturasAll().filter(v=>v.ativo!==false&&v.unidade!=="reboque"&&(!G||gPares(G).some(g=>gestorCobreViatura(g,v))));};
 function diasDoPedido(p){if(!p.previstoInicio)return[];const a=dayKey(p.previstoInicio),b=p.previstoFim?dayKey(p.previstoFim):a;const out=[];let k=a,g=0;while(k<=b&&g++<62){out.push(k);k=addDays(k,1);}return out;}
-function optGestores(){const gs=S.d.gestores.filter(g=>g.ativo!==false);if(gs.length)return opt0().concat(gs.map(g=>[g.id,g.nome]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));
+function optGestores(){const gs=S.d.gestores.filter(g=>g.ativo!==false);if(gs.length){const seen=new Set(),o=[];
+    gs.forEach(g=>{if(seen.has(g.id))return;const pr=gPares(g).filter(x=>x.ativo!==false).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt"));pr.forEach(x=>seen.add(x.id));seen.add(g.id);
+      o.push(pr.length>1?[pr[0].id,pr.map(x=>x.nome).join(" e ")]:[g.id,g.nome]);});
+    return opt0().concat(o.sort((a,b)=>a[1].localeCompare(b[1],"pt")));}
   const ids=new Set([...S.d.utilizadores.filter(u=>u.ativo!==false).map(u=>u.id),...S.d.obras.map(o=>o.gestorId).filter(Boolean)]);wantProf([...ids]);return opt0().concat([...ids].map(i=>[i,nome(i)]).sort((a,b)=>a[1].localeCompare(b[1],"pt")));}
 function planoData(opt={}){const f=S.f.ag,dia=f.data;const ps=agFilt(scope());
   const doDia=ps.filter(p=>estPlano().includes(p.estado)&&diasDoPedido(p).includes(dia)).sort((a,b)=>String(a.previstoInicio).localeCompare(b.previstoInicio));
@@ -2314,13 +2331,14 @@ function modalHtml(){const m=S.modal;const P=m.id?M.ped[m.id]:null;
      <section class="form-sec"><header><span class="k">1</span><h3>Empresas</h3></header><div>${EMPRESAS.map(e=>ck("emp",e[0],e[1])).join("")}</div></section>
      <section class="form-sec"><header><span class="k">1</span><h3>Tipos de viatura</h3></header><div>${cats(true).map(c=>`<div class="fld"><span>${esc(c.nome)}</span>${eqs(c.id,true).map(e=>ck("eq",e.id,e.nome)).join("")}</div>`).join("")}</div></section>
      <section class="form-sec"><header><span class="k">2</span><h3>Zonas operacionais</h3></header><div>${zonas(true).map(z=>ck("zo",z.id,z.nome)).join("")}</div></section>
+     ${m.id?`<section class="form-sec"><header><span class="k">3</span><h3>Partilha pedidos com</h3></header><div>${S.d.gestores.filter(g=>g.id!==m.id&&g.ativo!==false).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),"pt")).map(g=>ck("par",g.id,g.nome)).join("")||'<span class="muted">Sem outros gestores.</span>'}<small class="muted" style="display:block">Os pedidos de um ficam também do outro: aparecem a ambos e o filtro Gestor mostra-os juntos.</small></div></section>`:""}
      <p class="muted" style="margin:0;font-size:13px">Um grupo sem nada marcado conta como “todos”. O gestor fica responsável pelas viaturas das empresas e tipos marcados e, dentro delas, pelos pedidos das zonas marcadas.</p>
      <p class="muted" style="margin:0;font-size:13px">Utilizador: ${(()=>{const p=pessoaLog(M.gest[m.id]);return !p?"<b>sem utilizador de logística</b> — esta ficha não recebe pedidos.":p.t==="user"?`<b>${esc(p.nome)}</b> (ativo)`:`<b>${esc(p.nome)}</b> (à espera do primeiro acesso)`;})()}</p>
      ${fld("modal.f.ativo","Ativo",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
      `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveSimple" data-a="gestores">Guardar</button>`);}
   if(m.t==="categoria"||m.t==="zona"){const col=m.t==="zona"?"zonas":"categorias";return wrap(`<h2>${m.id?"Editar":"Nova"} ${m.t==="zona"?"zona operacional":"categoria"}</h2>`,`${fld("modal.f.nome","Nome",{req:true})}${fld("modal.f.ordem","Ordem",{type:"number"})}${fld("modal.f.ativo","Ativa",{type:"check"})}${m.err?`<div class="note bad">${esc(m.err)}</div>`:""}`,
      `<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveSimple" data-a="${col}">Guardar</button>`,true);}
-  if(m.t==="utilizador"){const u=M.user[m.id];return wrap(`<h2>${esc(nome(m.id))}</h2>`,`${fld("modal.f.perfil","Perfil",{type:"select",opts:ROLES_UI()})}${fld("modal.f.alcunha","Nome a mostrar (se o nome da conta não aparecer)")}${fld("modal.f.ativo","Ativo",{type:"check"})}
+  if(m.t==="utilizador"){const u=M.user[m.id];return wrap(`<h2>${esc(nome(m.id))}</h2>`,`${fld("modal.f.perfil","Perfil",{type:"select",opts:ROLES_UI()})}${fld("modal.f.alcunha","Nome a mostrar (se o nome da conta não aparecer)")}${fld("modal.f.elimPed","Pode eliminar pedidos",{type:"check",hint:"Como o administrador: seleciona pedidos na Lista de pedidos e elimina-os (ficam no Registo de eliminações)."})}${fld("modal.f.ativo","Ativo",{type:"check"})}
      <div class="tl">${(u.historico||[]).slice().reverse().map(h=>`<div><span class="num">${fmtDT(h.em)}</span><span>${esc(h.acao)} · ${esc(nome(h.por))}</span></div>`).join("")}</div>`,`<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveUser">Guardar</button>`,true);}
   return "";}
 function pedDetalhe(P){const r=P.recurso||{};const o=M.obra[P.obraId]||{};wantProf([P.criadoPor,P.logisticaId,P.confirmadoPor,...(P.historico||[]).map(h=>h.por)]);
@@ -2472,10 +2490,10 @@ const A={
   selPed(id){S.selPed=S.selPed||new Set();S.selPed.has(id)?S.selPed.delete(id):S.selPed.add(id);render();},
   selAll(){S.selPed=S.selPed||new Set();const ps=pedFilt();const all=ps.every(p=>S.selPed.has(p.id));ps.forEach(p=>all?S.selPed.delete(p.id):S.selPed.add(p.id));render();},
   selClr(){S.selPed=new Set();render();},
-  delPeds(){if(!podeEliminar()||!S.selPed||!S.selPed.size)return;S.modal={t:"delPeds",f:{}};render();},
-  async doDelPeds(){if(!podeEliminar())return;const ids=[...S.selPed].filter(id=>M.ped[id]);const btn=document.querySelector("[data-act=doDelPeds]");if(btn)btn.disabled=true;let n=0;
+  delPeds(){if(!podeElimPed()||!S.selPed||!S.selPed.size)return;S.modal={t:"delPeds",f:{}};render();},
+  async doDelPeds(){if(!podeElimPed())return;const ids=[...S.selPed].filter(id=>M.ped[id]);const btn=document.querySelector("[data-act=doDelPeds]");if(btn)btn.disabled=true;let n=0;
     try{for(const id of ids){const p=M.ped[id];const dados=Object.fromEntries(Object.entries(p).filter(([k])=>k!=="id"));await db.collection("eliminados").doc().set({col:"pedidos",docId:id,nome:`Pedido ${numT(p)}`,dados,por:S.me.id,em:nowISO()});await db.doc("pedidos/"+id).delete();n++;}
-      toast(`${n} pedido(s) eliminado(s). Pode restaurá-los em Configurações › Registo de eliminações.`);}catch(e){toast(errMsg(e)+` (${n} eliminados antes do erro)`,"bad");}
+      toast(`${n} pedido(s) eliminado(s). ${realRole()==="admin"?"Pode restaurá-los":"O administrador pode restaurá-los"} em Configurações › Registo de eliminações.`);}catch(e){toast(errMsg(e)+` (${n} eliminados antes do erro)`,"bad");}
     S.selPed=new Set();S.modal=null;render();},
   sedeAdd(){S.sedF=S.sedF||sedesCfg().map(x=>({...x}));S.sedF.push({nome:"",obra:""});render();},
   sedeRem(i){S.sedF.splice(+i,1);render();},
@@ -2493,7 +2511,7 @@ const A={
     const patch={inicioEfetivo:ini,historico:hist(P,"Validação editada",mud.join("; ")+(String(f.motivo||"").trim()?` · Motivo: ${f.motivo.trim()}`:""))};if(fe){patch.conclusaoEfetiva=fim;patch.recurso={...(P.recurso||{}),custoEfetivo:ce};}
     await savePed(P,patch,`Validação de ${P.numero} atualizada.`);S.modal=null;render();},
   async anularConclusao(){const m=S.modal,P=M.ped[m.id];await savePed(P,{estado:"Em execução",conclusaoEfetiva:null,historico:hist(P,"Conclusão anulada",String(m.f.motivo||"").trim()||"")},`${P.numero} voltou a “Em execução”.`);S.modal=null;render();},
-  logRem(id){const F=S.form;if(!F)return;F._logMan=true;F.logisticaIds=F.logisticaIds.filter(x=>x!==id);F.logisticaId=F.logisticaIds[0]||"";render();},
+  logRem(id){const F=S.form;if(!F)return;F._logMan=true;const g=gDeRef(id);const fora=g?gPares(g).flatMap(x=>[gRef(x),"g:"+x.id,x.utilizadorId].filter(Boolean)):[id];F.logisticaIds=F.logisticaIds.filter(x=>x!==id&&!fora.includes(x));F.logisticaId=F.logisticaIds[0]||"";render();},
   vAdd(){const F=S.form;F.vExtra.push({categoriaId:F.categoriaId,equipamentoId:"",variante:"",qtd:"1",ini_d:F.periodoInicio_d||"",ini_h:F.periodoInicio_h||"",fim_d:F.periodoFim_d||"",fim_h:F.periodoFim_h||""});render();},
   vRem(i){S.form.vExtra.splice(+i,1);render();},
   mAdd(){S.form.mExtra.push({cDesc:"",cMat:"",cPeso:"",cVol:"",cC:"",cL:"",cA:""});render();},
@@ -2841,7 +2859,7 @@ const A={
   material(id){const x=id?M.mat[id]:null;S.modal={t:"material",id:id||null,f:x?{...x,ativo:x.ativo!==false,eqs:Object.fromEntries((x.equipamentos||[]).map(e=>[e,true]))}:{nome:"",tipo:"material",unidade:"",caracteristicas:"",ativo:true,eqs:{}}};render();},
   equip(id){const x=id?M.eq[id]:null;S.modal={t:"equip",id:id||null,f:x?{...x,ativo:x.ativo!==false,recolha:!!x.recolha,variantesTxt:(x.variantes||[]).join("\n")}:{nome:"",categoriaId:"",ordem:"",recolha:false,variantesTxt:"",ativo:true}};render();},
   categoria(id){const x=id?M.cat[id]:null;S.modal={t:"categoria",id:id||null,f:x?{...x,ativo:x.ativo!==false}:{nome:"",ordem:"",ativo:true}};render();},
-  gestor(id){const x=id?M.gest[id]:null;const tm=a=>Object.fromEntries((a||[]).map(k=>[k,true]));S.modal={t:"gestor",id:id||null,f:x?{...x,ativo:x.ativo!==false,emp:tm(gEmp(x)),eq:tm(gEq(x)),zo:tm(gZo(x))}:{nome:"",funcao:"",contacto:"",email:"",utilizadorId:"",ativo:true,emp:{},eq:{},zo:{}}};render();},
+  gestor(id){const x=id?M.gest[id]:null;const tm=a=>Object.fromEntries((a||[]).map(k=>[k,true]));S.modal={t:"gestor",id:id||null,f:x?{...x,ativo:x.ativo!==false,emp:tm(gEmp(x)),eq:tm(gEq(x)),zo:tm(gZo(x)),par:tm(gPares(x).map(g=>g.id).filter(i=>i!==x.id))}:{nome:"",funcao:"",contacto:"",email:"",utilizadorId:"",ativo:true,emp:{},eq:{},zo:{}}};render();},
   zona(id){const x=id?M.zona[id]:null;S.modal={t:"zona",id:id||null,f:x?{...x,ativo:x.ativo!==false}:{nome:"",ordem:"",ativo:true}};render();},
   async saveSimple(col){const m=S.modal,f=m.f;const req=col==="viaturas"?(f.matricula||f.ident):f.nome;if(col==="viaturas"&&!m.id&&M.via["v-"+plateKey(req)]){m.err="Já existe uma viatura com esta matrícula.";return render();}if(!String(req||"").trim()){m.err="Preencha o nome.";return faltaRender();}
     let data;
@@ -2849,7 +2867,7 @@ const A={
       const mat=normPlate(f.matricula||f.ident);const eqL=[...new Set([f.equipamentoId,...reb.map(b=>eqDeTipo(b.tipo))].filter(e=>e&&M.eq[e]))];
       data={ident:mat,matricula:mat,unidade:f.unidade||"conjunto",empresa:f.empresa||"CPSA",sede:f.sede||"",zonaId:f.zonaId||null,reboques:reb,equipamentoId:f.equipamentoId||eqL[0]||null,equipamentos:eqL,eixos:f.eixos?+f.eixos:null,disponibilidade:f.disponibilidade||"disponivel",motorista:f.motorista||"",contacto:String(f.contacto||""),suplente:!!f.suplente,obs:f.obs||"",ativo:!!f.ativo};}
     else if(col==="transportadoras")data={nome:f.nome.trim(),nif:f.nif||"",contacto:f.contacto||"",obs:f.obs||"",ativo:!!f.ativo,equipamentos:Object.keys(f.eqs||{}).filter(k=>f.eqs[k])};
-    else if(col==="gestores"){if(!m.id){m.err="Os gestores criam-se em Utilizadores, com o perfil Gestor de logística.";return render();}const on=o=>Object.keys(o||{}).filter(k=>o[k]);data={nome:f.nome.trim(),funcao:f.funcao||"",empresas:on(f.emp),equipamentos:on(f.eq),zonas:on(f.zo),zonaId:null,contacto:String(f.contacto||""),email:f.email||"",utilizadorId:f.utilizadorId||null,conviteId:f.conviteId||null,ativo:!!f.ativo};}
+    else if(col==="gestores"){if(!m.id){m.err="Os gestores criam-se em Utilizadores, com o perfil Gestor de logística.";return render();}const on=o=>Object.keys(o||{}).filter(k=>o[k]);data={nome:f.nome.trim(),funcao:f.funcao||"",empresas:on(f.emp),equipamentos:on(f.eq),zonas:on(f.zo),zonaId:null,contacto:String(f.contacto||""),email:f.email||"",utilizadorId:f.utilizadorId||null,conviteId:f.conviteId||null,partilha:on(f.par),ativo:!!f.ativo};m._par=on(f.par);}
     else if(col==="clientes"){if(!m.id&&(S.d.clientes||[]).some(c=>normNome(c.nome)===normNome(f.nome))){m.err="Já existe um cliente com este nome.";return render();}data={nome:f.nome.trim(),contacto:f.contacto||"",obs:f.obs||"",ativo:!!f.ativo,materiais:Object.keys(f.mat||{}).filter(k=>f.mat[k])};}
     else if(col==="fornecedores")data={nome:f.nome.trim(),contacto:f.contacto||"",morada:f.morada||"",obs:f.obs||"",ativo:!!f.ativo};
     else if(col==="materiais")data={nome:f.nome.trim(),tipo:f.tipo||"material",unidade:f.unidade||"",caracteristicas:f.caracteristicas||"",ativo:!!f.ativo,equipamentos:Object.keys(f.eqs||{}).filter(k=>f.eqs[k])};
@@ -2857,6 +2875,8 @@ const A={
     else data={nome:f.nome.trim(),ordem:numOr(f.ordem)??99,ativo:!!f.ativo};
     data.alteradoEm=nowISO();data.alteradoPor=S.me.id;
     if(m.id)await W(()=>db.doc(col+"/"+m.id).update(data),"Guardado.");else await W(()=>db.collection(col).doc(col==="viaturas"?"v-"+plateKey(data.matricula):undefined).set({...data,criadoEm:nowISO(),criadoPor:S.me.id}),"Criado.");
+    if(col==="gestores"&&m.id&&m._par){for(const g of S.d.gestores.filter(x=>x.id!==m.id)){const tem=(g.partilha||[]).includes(m.id),quer=m._par.includes(g.id);
+        if(tem!==quer){const np=quer?[...(g.partilha||[]),m.id]:(g.partilha||[]).filter(i=>i!==m.id);try{await db.doc("gestores/"+g.id).update({partilha:np});g.partilha=np;}catch(e){toast(errMsg(e),"bad");}}}}
     S.modal=null;render();},
   async addUni(){const v=String(S.tmpUni||"").trim();if(!v)return;const us=[...CFG().unidades];if(!us.includes(v))us.push(v);await W(()=>db.doc("cfg/geral").set({...CFG(),unidades:us}),"Unidade adicionada.");S.tmpUni="";render();},
   async delUni(i){const us=[...CFG().unidades];us.splice(+i,1);await W(()=>db.doc("cfg/geral").set({...CFG(),unidades:us}),"Unidade removida.");},
@@ -2867,9 +2887,9 @@ const A={
     await W(()=>db.doc("utilizadores/"+id).set({perfil,ativo:true,criadoEm:nowISO(),criadoPor:S.me.id,historico:[{em:nowISO(),por:S.me.id,acao:`Acesso aprovado como ${ROLE_LABEL[perfil]}`}]}),"Acesso aprovado.");
     db.doc("acessos/"+id).update({estado:"aprovado"}).catch(()=>{});},
   async recAcesso(id){await W(()=>db.doc("acessos/"+id).update({estado:"recusado",decididoPor:S.me.id,decididoEm:nowISO()}),"Pedido de acesso recusado.");},
-  utilizador(id){const u=M.user[id];if(!u)return;S.modal={t:"utilizador",id,f:{perfil:u.perfil,alcunha:u.alcunha||"",ativo:u.ativo!==false}};render();},
-  async saveUser(){const m=S.modal,u=M.user[m.id],f=m.f;const ch=[];if(f.perfil!==u.perfil)ch.push(`Perfil ${ROLE_LABEL[u.perfil]} → ${ROLE_LABEL[f.perfil]}`);if(!!f.ativo!==(u.ativo!==false))ch.push(f.ativo?"Reativado":"Desativado");
-    await W(()=>db.doc("utilizadores/"+m.id).update({perfil:f.perfil,alcunha:f.alcunha.trim(),ativo:!!f.ativo,historico:[...(u.historico||[]),...ch.map(c=>({em:nowISO(),por:S.me.id,acao:c}))]}),"Utilizador atualizado.");S.modal=null;render();},
+  utilizador(id){const u=M.user[id];if(!u)return;S.modal={t:"utilizador",id,f:{perfil:u.perfil,alcunha:u.alcunha||"",elimPed:!!u.elimPed,ativo:u.ativo!==false}};render();},
+  async saveUser(){const m=S.modal,u=M.user[m.id],f=m.f;const ch=[];if(f.perfil!==u.perfil)ch.push(`Perfil ${ROLE_LABEL[u.perfil]} → ${ROLE_LABEL[f.perfil]}`);if(!!f.ativo!==(u.ativo!==false))ch.push(f.ativo?"Reativado":"Desativado");if(!!f.elimPed!==!!u.elimPed)ch.push(f.elimPed?"Pode eliminar pedidos":"Deixa de poder eliminar pedidos");
+    await W(()=>db.doc("utilizadores/"+m.id).update({perfil:f.perfil,alcunha:f.alcunha.trim(),elimPed:!!f.elimPed,ativo:!!f.ativo,historico:[...(u.historico||[]),...ch.map(c=>({em:nowISO(),por:S.me.id,acao:c}))]}),"Utilizador atualizado.");S.modal=null;render();},
   async pedirAcesso(){if(!S.me.id)return;await W(()=>db.doc("acessos/"+S.me.id).set({perfil:S.req.perfil,nota:S.req.nota,em:nowISO(),estado:"pendente"}),"Pedido de acesso enviado ao administrador.");render();},
   exp(a){const[w,fmt]=a.split("|");exportar(w,fmt);},
   async backup(){const data={geradoEm:nowISO(),...Object.fromEntries(COLS.filter(c=>c!=="notificacoes").map(c=>[c,S.d[c]]))};await saveFile(`backup-transportes-${todayKey()}.json`,JSON.stringify(data,null,1));}
@@ -2910,6 +2930,8 @@ const DEL_COL={cli:"clientes",cvt:"convites",zon:"zonas",gst:"gestores",forn:"fo
 const COL_LAB={clientes:"Cliente de cisternas",convites:"Utilizador criado",zonas:"Zona",gestores:"Gestor responsável",fornecedores:"Fornecedor",materiais:"Material",categorias:"Categoria",viaturas:"Viatura",obras:"Obra",transportadoras:"Transportadora",utilizadores:"Utilizador",equipamentos:"Tipo de viatura",box:"Box de carga",uni:"Unidade"};
 const DEF_ROUTES=["frota","externos","obras","materiais","utilizadores","configuracoes"];
 function podeEliminar(){return realRole()==="admin"&&!S.sim;}
+/* Eliminar pedidos: administrador ou utilizador com "Pode eliminar pedidos" (utilizadores/{id}.elimPed) */
+function podeElimPed(){return !S.sim&&(realRole()==="admin"||!!(S.me.id&&M.user&&M.user[S.me.id]&&M.user[S.me.id].elimPed));}
 function regNome(col,id){if(col==="viaturas"){const v=M.via[id];return v?(v.matricula||v.ident):id;}if(col==="obras"){const o=M.obra[id];return o?`${o.codigo} · ${o.nome}`:id;}
   if(col==="utilizadores")return nome(id);if(col==="box")return (CFG().boxes||[])[+id]||id;if(col==="uni")return CFG().unidades[+id]||id;
   const mm={convites:M.conv,zonas:M.zona,gestores:M.gest,fornecedores:M.forn,materiais:M.mat,categorias:M.cat,transportadoras:M.tr,equipamentos:M.eq}[col];return(mm&&mm[id]&&mm[id].nome)||id;}
@@ -3045,7 +3067,7 @@ document.addEventListener("change",async e=>{const t=e.target;if(t.dataset&&t.da
       let r=null;for(const n of wb.SheetNames){r=parseLocaisClientes(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:false,defval:null}));if(r&&r.rows.length)break;}
       if(!r||!r.rows.length){toast("O ficheiro não tem o formato esperado (colunas Cliente, local de carga e coordenadas, local de descarga e coordenadas).","bad");return;}
       S.impLoc={nome:file.name,...r};S.modal={t:"impLoc"};render();}catch(e){console.error(e);toast("Não foi possível ler o ficheiro Excel.","bad");}return;}
-  if(t.dataset&&t.dataset.addlog){const v=t.value;if(v&&S.form){S.form._logMan=true;if(!S.form.logisticaIds.includes(v))S.form.logisticaIds.push(v);S.form.logisticaId=S.form.logisticaIds[0];}render();return;}
+  if(t.dataset&&t.dataset.addlog){const v=t.value;if(v&&S.form){S.form._logMan=true;if(!S.form.logisticaIds.includes(v))S.form.logisticaIds=expandLog([...S.form.logisticaIds,v]);S.form.logisticaId=S.form.logisticaIds[0];}render();return;}
   if(t.dataset&&t.dataset.cis){const file=t.files[0];t.value="";if(!file)return;try{await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});
       let rows=null;for(const n of wb.SheetNames){const r=parseCisternas(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null}));if(r&&r.length){rows=r;break;}}
       S.impC={nome:file.name,rows:rows||[]};S.modal={t:"impCis"};render();}catch(e){console.error(e);toast("Não foi possível ler o ficheiro Excel.","bad");}return;}
